@@ -1,0 +1,127 @@
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/source_sans/source-sans-3-v18-latin-regular.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 500;
+  src: url('/fonts/source_sans/source-sans-3-v18-latin-500.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 600;
+  src: url('/fonts/source_sans/source-sans-3-v18-latin-600.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/fonts/source_sans/source-sans-3-v18-latin-700.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/source_serif/source-serif-4-v13-latin-regular.woff2') format('woff2');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 500;
+  src: url('/fonts/source_serif/source-serif-4-v13-latin-500.woff2') format('woff2');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 600;
+  src: url('/fonts/source_serif/source-serif-4-v13-latin-600.woff2') format('woff2');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/fonts/source_serif/source-serif-4-v13-latin-700.woff2') format('woff2');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/noto_sans_sc/noto-sans-sc-v37-latin-regular.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 500;
+  src: url('/fonts/noto_sans_sc/noto-sans-sc-v37-latin-500.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/fonts/noto_sans_sc/noto-sans-sc-v37-latin-700.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/noto_serif_sc/noto-serif-sc-v31-latin-regular.woff2') format('woff2');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/fonts/noto_serif_sc/noto-serif-sc-v31-latin-700.woff2') format('woff2');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/cinzel/cinzel-v23-latin-regular.woff2') format('woff2');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/fonts/cinzel/cinzel-v23-latin-700.woff2') format('woff2');
+  font-display: swap;
+}
+
+:root {
+  --font-source-sans: 'Source Sans 3';
+  --font-source-serif: 'Source Serif 4';
+  --font-cinzel: 'Cinzel';
+  --font-noto-sans-sc: 'Noto Sans SC';
+  --font-noto-serif-sc: 'Noto Serif SC';
+}

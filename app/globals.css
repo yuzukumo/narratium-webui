@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+:root {
+  --sidebar-bg: #1c1c1c;
+  --main-bg: #232323;
+  --text-primary: #d0d0d0;
+  --text-secondary: #8a8a8a;
+  --accent-color: #5d5d5d;
+  --border-color: #333333;
+  --input-bg: #2a2a2a;
+  --button-hover: #3a3a3a;
+  --card-bg: #292929;
+  --story-text-color: #c0c0c0;
+  --user-input-color: #9c9c9c;
+}
+
+body {
+  background-color: var(--main-bg);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  letter-spacing: 0.015em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body {
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+a {
+  color: var(--accent-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: #7a7a7a;
+}
+
+button,
+.button {
+  transition: all 0.2s ease;
+}
+input,
+textarea,
+select {
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  transition: border-color 0.2s ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(93, 93, 93, 0.2);
+}
+
+.story-text {
+  color: var(--story-text-color);
+  font-size: 0.95rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  font-family: 'Noto Serif', 'Source Serif Pro', 'Crimson Pro', Georgia, 'Times New Roman', serif;
+  letter-spacing: 0.01em;
+  text-rendering: optimizeLegibility;
+}
+
+.user-input {
+  color: var(--user-input-color);
+  font-style: italic;
+}
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--sidebar-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+@keyframes gradient-x {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 8s ease infinite;
+}
+

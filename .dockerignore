@@ -1,0 +1,13 @@
+.git
+.github
+.next
+out
+node_modules
+coverage
+dist
+.idea
+.vscode
+.env*
+npm-debug.log
+pnpm-debug.log
+*.log
