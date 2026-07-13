@@ -49,6 +49,7 @@ import {
 
 interface ProviderConfig {
   id: string;
+  channel_id: number;
   name: string;
   provider: "openai" | "anthropic" | "gemini";
   api_format: "responses" | "chat_completions" | "messages" | "generate_content";
@@ -60,6 +61,7 @@ interface ProviderConfig {
 
 interface ProviderDraft {
   id: string;
+  channel_id: number | null;
   name: string;
   provider: ProviderConfig["provider"];
   api_format: ProviderConfig["api_format"];
@@ -110,6 +112,7 @@ const isNonUnitMultiplier = (value: string): boolean => {
 
 const emptyProvider = (): ProviderDraft => ({
   id: "",
+  channel_id: null,
   name: "",
   provider: "openai",
   api_format: "responses",
@@ -194,6 +197,14 @@ const mergeModelIDs = (current: string[], incoming: string[]): string[] => {
   return merged;
 };
 
+const sortProvidersByChannelID = (items: ProviderConfig[]): ProviderConfig[] => (
+  [...items].sort((left, right) => {
+    const leftID = Number.isFinite(left.channel_id) ? left.channel_id : Number.MAX_SAFE_INTEGER;
+    const rightID = Number.isFinite(right.channel_id) ? right.channel_id : Number.MAX_SAFE_INTEGER;
+    return leftID - rightID || left.id.localeCompare(right.id);
+  })
+);
+
 export default function AdminPage() {
   const router = useRouter();
   const { user, refresh: refreshAuth } = useAuth();
@@ -235,7 +246,7 @@ export default function AdminPage() {
         apiJSON<{ items: AuthUser[]; total: number }>("/api/v1/admin/users?limit=200"),
         apiJSON<{ registration_enabled: boolean; email_verification_enabled: boolean }>("/api/v1/admin/settings"),
       ]);
-      setProviders(providerPayload.items);
+      setProviders(sortProvidersByChannelID(providerPayload.items));
 	  setAdminModels(modelPayload.items);
       setUsers(userPayload.items);
       setRegistrationEnabled(settings.registration_enabled);
@@ -292,6 +303,7 @@ export default function AdminPage() {
   const editProvider = (provider: ProviderConfig) => {
     setDraft({
       id: provider.id,
+      channel_id: provider.channel_id,
       name: provider.name,
       provider: provider.provider,
       api_format: provider.api_format,
@@ -370,9 +382,9 @@ export default function AdminPage() {
           body: JSON.stringify(payload),
         },
       );
-      setProviders((items) => editing
+      setProviders((items) => sortProvidersByChannelID(editing
         ? items.map((item) => item.id === result.provider.id ? result.provider : item)
-        : [...items, result.provider]);
+        : [...items, result.provider]));
       setProviderDrawerOpen(false);
       setDraft(emptyProvider());
       setModelInput("");
@@ -684,9 +696,10 @@ export default function AdminPage() {
             </div>
 
             <div className="w-full max-w-full overflow-x-auto rounded-md border border-[#534741]/70 bg-[#211e1c] shadow-lg shadow-black/20">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[820px] text-left text-sm">
                 <thead className="border-b border-[#534741]/60 bg-[#2b2724] text-xs text-[#a18d6f]">
                   <tr>
+                    <th className="w-20 px-3 py-3 font-medium">{t("admin.channels.columns.id")}</th>
                     <th className="px-3 py-3 font-medium">{t("admin.channels.columns.name")}</th>
                     <th className="px-3 py-3 font-medium">{t("admin.channels.columns.type")}</th>
                     <th className="px-3 py-3 font-medium">{t("admin.channels.columns.models")}</th>
@@ -697,6 +710,7 @@ export default function AdminPage() {
                 <tbody className="divide-y divide-[#534741]/40">
                   {providers.map((provider) => (
                     <tr key={provider.id} className="bg-[#1d1a18] transition-colors hover:bg-[#28231f]">
+                      <td className="px-3 py-3 font-mono text-xs tabular-nums text-[#d9b16b]">{provider.channel_id}</td>
                       <td className="max-w-64 px-3 py-3">
                         <span className="block truncate text-[#eae6db]">{provider.name}</span>
                         <span className="mt-0.5 block truncate font-mono text-[11px] text-[#817361]" title={provider.base_url}>
@@ -781,7 +795,7 @@ export default function AdminPage() {
                   ))}
                   {providers.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="bg-[#1d1a18] px-4 py-12 text-center text-sm text-[#817361]">
+                      <td colSpan={6} className="bg-[#1d1a18] px-4 py-12 text-center text-sm text-[#817361]">
                         {t("admin.channels.empty")}
                       </td>
                     </tr>
@@ -999,7 +1013,11 @@ export default function AdminPage() {
             aria-labelledby="provider-drawer-title"
             className="absolute inset-y-0 right-0 w-full border-l border-[#66564b] bg-[#1d1a18] shadow-[-18px_0_50px_rgba(0,0,0,0.45)] sm:w-[30rem] sm:max-w-[calc(100vw-2rem)]"
           >
-            <form onSubmit={saveProvider} className="flex h-full min-h-0 flex-col">
+            <form
+              onSubmit={saveProvider}
+              autoComplete="off"
+              className="flex h-full min-h-0 flex-col"
+            >
               <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[#534741]/70 bg-[#252220] px-4 py-4">
                 <div className="min-w-0">
                   <h2 id="provider-drawer-title" className={`${titleFontClass} truncate text-base font-semibold text-[#f4e8c1]`}>
@@ -1024,6 +1042,12 @@ export default function AdminPage() {
 
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
                 <div className="space-y-4">
+                  {draft.channel_id !== null && (
+                    <div className="flex items-center justify-between rounded-md border border-[#534741]/50 bg-[#211e1c] px-3 py-2.5 text-xs">
+                      <span className="text-[#a18d6f]">{t("admin.channels.form.channelId")}</span>
+                      <span className="font-mono tabular-nums text-[#d9b16b]">{draft.channel_id}</span>
+                    </div>
+                  )}
                   <label htmlFor="provider-name" className="block text-xs text-[#a18d6f]">
                     {t("admin.channels.form.name")}
                     <input
@@ -1127,7 +1151,15 @@ export default function AdminPage() {
                     {t("admin.channels.form.apiKey")}
                     <input
                       id="provider-api-key"
-                      type="password"
+                      type="text"
+                      name="channel-api-credential"
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-1p-ignore="true"
+                      data-bwignore="true"
+                      data-lpignore="true"
                       required={!draft.id}
                       value={draft.api_key}
                       onChange={(event) => setDraft({ ...draft, api_key: event.target.value })}
@@ -1171,6 +1203,15 @@ export default function AdminPage() {
                       <div className="flex items-center gap-1.5">
                         <input
                           id="provider-models"
+                          type="text"
+                          name="channel-model-id"
+                          autoComplete="off"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          data-1p-ignore="true"
+                          data-bwignore="true"
+                          data-lpignore="true"
                           value={modelInput}
                           onChange={(event) => {
                             setModelInput(event.target.value);

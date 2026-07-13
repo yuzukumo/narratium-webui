@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -544,10 +545,18 @@ func (r *testRepository) RevokeSessions(_ context.Context, id string, tokenVersi
 }
 
 func (r *testRepository) ListProviders(context.Context) ([]domain.ProviderConfig, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	items := make([]domain.ProviderConfig, 0, len(r.providers))
 	for _, item := range r.providers {
 		items = append(items, item)
 	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].ChannelID == items[j].ChannelID {
+			return items[i].ID < items[j].ID
+		}
+		return items[i].ChannelID < items[j].ChannelID
+	})
 	return items, nil
 }
 
@@ -567,6 +576,16 @@ func (r *testRepository) CreateProvider(_ context.Context, item domain.ProviderC
 	}
 	if _, exists := r.providers[item.ID]; exists {
 		return domain.ProviderConfig{}, store.ErrConflict
+	}
+	if item.ChannelID == 0 {
+		for _, existing := range r.providers {
+			if existing.ChannelID >= item.ChannelID {
+				item.ChannelID = existing.ChannelID + 1
+			}
+		}
+		if item.ChannelID == 0 {
+			item.ChannelID = 1
+		}
 	}
 	r.providers[item.ID] = item
 	r.replaceProviderModels(item)
@@ -625,9 +644,17 @@ func (r *testRepository) DeleteProvider(_ context.Context, id string) (domain.Pr
 	return item, nil
 }
 
-func (r *testRepository) ListModels(context.Context, bool) ([]domain.Model, error) {
+func (r *testRepository) ListModels(_ context.Context, availableOnly bool) ([]domain.Model, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var items []domain.Model
 	for _, item := range r.models {
+		if availableOnly {
+			provider, ok := r.providers[item.ProviderConfigID]
+			if !ok || !provider.Enabled || provider.APIKeyCiphertext == "" {
+				continue
+			}
+		}
 		items = append(items, item)
 	}
 	return items, nil
@@ -1051,6 +1078,9 @@ func TestModelListEncodesEmptyItemsAsArray(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
+	if response.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("cache-control=%q, want private, no-store", response.Header().Get("Cache-Control"))
+	}
 	if strings.TrimSpace(response.Body.String()) != `{"items":[]}` {
 		t.Fatalf("body=%s, want an empty JSON array", response.Body.String())
 	}
@@ -1147,6 +1177,16 @@ func TestAdminCreatesOpenAIChatCompletionsProvider(t *testing.T) {
 	if strings.Contains(response.Body.String(), "test-secret") || strings.Contains(response.Body.String(), saved.APIKeyCiphertext) {
 		t.Fatalf("provider response leaked a secret: %s", response.Body.String())
 	}
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/models", nil)
+	listRequest.AddCookie(server.cookie(t, admin))
+	listResponse := httptest.NewRecorder()
+	server.router.ServeHTTP(listResponse, listRequest)
+	if listResponse.Code != http.StatusOK ||
+		!strings.Contains(listResponse.Body.String(), `"external_id":"glm-5.2"`) ||
+		!strings.Contains(listResponse.Body.String(), `"external_id":"gpt-5.5"`) {
+		t.Fatalf("model list status=%d body=%s", listResponse.Code, listResponse.Body.String())
+	}
 }
 
 func TestAdminProviderCreateRequiresModels(t *testing.T) {
@@ -1221,6 +1261,11 @@ func TestAdminCanListAndConfigureModels(t *testing.T) {
 	repository := newTestRepository()
 	admin := domain.User{ID: "admin-1", Name: "admin", Role: domain.RoleAdmin, Status: domain.StatusActive, TokenVersion: 1}
 	repository.users[admin.ID] = admin
+	repository.providers["provider-1"] = domain.ProviderConfig{
+		ID: "provider-1", Name: "Primary", Provider: "openai",
+		APIFormat: domain.ProviderAPIFormatResponses, BaseURL: "https://gateway.example",
+		APIKeyCiphertext: "encrypted", Enabled: true,
+	}
 	repository.models["model-1"] = domain.Model{
 		ID: "model-1", ProviderConfigID: "provider-1", Provider: "openai", ProviderName: "Primary",
 		ExternalID: "gpt-test", Capabilities: domain.DefaultModelCapabilities("openai").JSON(),
@@ -1255,6 +1300,52 @@ func TestAdminCanListAndConfigureModels(t *testing.T) {
 	server.router.ServeHTTP(legacyResponse, legacyRequest)
 	if legacyResponse.Code != http.StatusNotFound {
 		t.Fatalf("legacy sync status=%d, want 404", legacyResponse.Code)
+	}
+}
+
+func TestAdminModelListRequiresEnabledProviderKey(t *testing.T) {
+	repository := newTestRepository()
+	admin := domain.User{ID: "admin-1", Name: "admin", Role: domain.RoleAdmin, Status: domain.StatusActive, TokenVersion: 1}
+	repository.users[admin.ID] = admin
+	repository.providers["provider-available"] = domain.ProviderConfig{
+		ID: "provider-available", Name: "Available gateway", Provider: "openai",
+		APIFormat: domain.ProviderAPIFormatResponses, BaseURL: "https://gateway.example",
+		APIKeyCiphertext: "encrypted", Enabled: true,
+	}
+	repository.providers["provider-no-key"] = domain.ProviderConfig{
+		ID: "provider-no-key", Name: "Unconfigured gateway", Provider: "openai",
+		APIFormat: domain.ProviderAPIFormatResponses, BaseURL: "https://gateway.example", Enabled: true,
+	}
+	repository.providers["provider-disabled"] = domain.ProviderConfig{
+		ID: "provider-disabled", Name: "Disabled gateway", Provider: "openai",
+		APIFormat: domain.ProviderAPIFormatResponses, BaseURL: "https://gateway.example",
+		APIKeyCiphertext: "encrypted", Enabled: false,
+	}
+	repository.models["model-available"] = domain.Model{
+		ID: "model-available", ProviderConfigID: "provider-available", Provider: "openai",
+		ProviderName: "Available gateway", ExternalID: "available-model",
+		Capabilities: json.RawMessage(`{}`),
+	}
+	repository.models["model-no-key"] = domain.Model{
+		ID: "model-no-key", ProviderConfigID: "provider-no-key", Provider: "openai",
+		ProviderName: "Unconfigured gateway", ExternalID: "no-key-model",
+		Capabilities: json.RawMessage(`{}`),
+	}
+	repository.models["model-disabled"] = domain.Model{
+		ID: "model-disabled", ProviderConfigID: "provider-disabled", Provider: "openai",
+		ProviderName: "Disabled gateway", ExternalID: "disabled-model",
+		Capabilities: json.RawMessage(`{}`),
+	}
+	server := newHTTPTestServer(t, repository, nil)
+
+	adminRequest := httptest.NewRequest(http.MethodGet, "/api/v1/admin/models", nil)
+	adminRequest.AddCookie(server.cookie(t, admin))
+	adminResponse := httptest.NewRecorder()
+	server.router.ServeHTTP(adminResponse, adminRequest)
+	body := adminResponse.Body.String()
+	if adminResponse.Code != http.StatusOK || !strings.Contains(body, `"external_id":"available-model"`) ||
+		strings.Contains(body, `"external_id":"no-key-model"`) || strings.Contains(body, `"external_id":"disabled-model"`) {
+		t.Fatalf("admin status=%d body=%s", adminResponse.Code, adminResponse.Body.String())
 	}
 }
 

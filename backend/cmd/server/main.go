@@ -39,12 +39,6 @@ func main() {
 		logger.Error("migrate database", "error", err)
 		os.Exit(1)
 	}
-	if err := repository.EnsureDefaultCatalog(ctx); err != nil {
-		cancel()
-		repository.Close()
-		logger.Error("initialize model catalog", "error", err)
-		os.Exit(1)
-	}
 	if err := repository.RecoverChatRuns(ctx); err != nil {
 		cancel()
 		repository.Close()

@@ -35,6 +35,7 @@ type User struct {
 
 type ProviderConfig struct {
 	ID                    string    `json:"id"`
+	ChannelID             int64     `json:"channel_id"`
 	Name                  string    `json:"name"`
 	Provider              string    `json:"provider"`
 	APIFormat             string    `json:"api_format"`

@@ -115,74 +115,6 @@ func (p *Postgres) Migrate(ctx context.Context) error {
 	return nil
 }
 
-func (p *Postgres) EnsureDefaultCatalog(ctx context.Context) error {
-	tx, err := p.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext('narratium:default-catalog'))"); err != nil {
-		return err
-	}
-	var initialized bool
-	if err := tx.QueryRow(ctx, `
-		SELECT COALESCE(
-			(SELECT (value #>> '{}')::boolean FROM settings WHERE key = 'default_catalog_initialized'),
-			false
-		)`,
-	).Scan(&initialized); err != nil {
-		return err
-	}
-	if initialized {
-		return tx.Commit(ctx)
-	}
-	var hasUsers, hasProviders bool
-	if err := tx.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM users), EXISTS (SELECT 1 FROM provider_configs)`,
-	).Scan(&hasUsers, &hasProviders); err != nil {
-		return err
-	}
-
-	providers := []domain.ProviderConfig{
-		{ID: "10000000-0000-4000-8000-000000000001", Name: "OpenAI", Provider: "openai", APIFormat: domain.ProviderAPIFormatResponses, PromptCacheKeyEnabled: true, BaseURL: "https://api.openai.com", Enabled: true},
-		{ID: "10000000-0000-4000-8000-000000000002", Name: "Anthropic", Provider: "anthropic", APIFormat: domain.ProviderAPIFormatMessages, BaseURL: "https://api.anthropic.com", Enabled: true},
-		{ID: "10000000-0000-4000-8000-000000000003", Name: "Google Gemini", Provider: "gemini", APIFormat: domain.ProviderAPIFormatGenerateContent, BaseURL: "https://generativelanguage.googleapis.com", Enabled: true},
-	}
-	models := []domain.Model{
-		{ID: "20000000-0000-4000-8000-000000000001", ProviderConfigID: providers[0].ID, ExternalID: "gpt-5.5", Capabilities: domain.ModelCapabilities{SchemaVersion: 2, ContextWindow: 1050000, CompactionThreshold: 997500, MaxOutputTokens: 128000, Reasoning: domain.ReasoningCapabilities{Enabled: true, Effort: "medium"}}.JSON()},
-		{ID: "20000000-0000-4000-8000-000000000002", ProviderConfigID: providers[1].ID, ExternalID: "claude-fable-5", Capabilities: domain.ModelCapabilities{SchemaVersion: 2, ContextWindow: 1000000, CompactionThreshold: 950000, MaxOutputTokens: 128000, Reasoning: domain.ReasoningCapabilities{Enabled: true, Effort: "high"}}.JSON()},
-		{ID: "20000000-0000-4000-8000-000000000003", ProviderConfigID: providers[2].ID, ExternalID: "gemini-3.1-pro-preview", Capabilities: domain.ModelCapabilities{SchemaVersion: 2, ContextWindow: 1048576, CompactionThreshold: 996147, MaxOutputTokens: 65536, Reasoning: domain.ReasoningCapabilities{Enabled: true, Effort: "high"}}.JSON()},
-	}
-	if !hasUsers && !hasProviders {
-		for _, item := range providers {
-			if _, err := tx.Exec(ctx, `
-			INSERT INTO provider_configs (id, name, provider, api_format, prompt_cache_key_enabled, base_url, enabled)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (id) DO NOTHING`, item.ID, item.Name, item.Provider, item.APIFormat, item.PromptCacheKeyEnabled, item.BaseURL, item.Enabled); err != nil {
-				return err
-			}
-		}
-		for _, item := range models {
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO models (id, provider_config_id, external_id, capabilities)
-				VALUES ($1, $2, $3, $4)
-				ON CONFLICT (provider_config_id, external_id) DO UPDATE SET
-					capabilities = models.capabilities || excluded.capabilities,
-					updated_at = now()`,
-				item.ID, item.ProviderConfigID, item.ExternalID, item.Capabilities); err != nil {
-				return err
-			}
-		}
-	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO settings (key, value)
-		VALUES ('default_catalog_initialized', 'true'::jsonb)
-		ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now()`); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
 func (p *Postgres) Bootstrap(ctx context.Context) (domain.BootstrapState, error) {
 	var state domain.BootstrapState
 	err := p.pool.QueryRow(ctx, `
@@ -457,7 +389,7 @@ func (p *Postgres) ConsumeEmailVerificationCode(ctx context.Context, email, code
 
 func scanProvider(row pgx.Row) (domain.ProviderConfig, error) {
 	var item domain.ProviderConfig
-	err := row.Scan(&item.ID, &item.Name, &item.Provider, &item.APIFormat, &item.PromptCacheKeyEnabled, &item.BaseURL, &item.APIKeyCiphertext,
+	err := row.Scan(&item.ID, &item.ChannelID, &item.Name, &item.Provider, &item.APIFormat, &item.PromptCacheKeyEnabled, &item.BaseURL, &item.APIKeyCiphertext,
 		&item.Enabled, &item.CreatedAt, &item.UpdatedAt, &item.Models)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return item, ErrNotFound
@@ -467,7 +399,7 @@ func scanProvider(row pgx.Row) (domain.ProviderConfig, error) {
 }
 
 const providerSelect = `
-	SELECT p.id, p.name, p.provider, p.api_format, p.prompt_cache_key_enabled,
+	SELECT p.id, p.channel_id, p.name, p.provider, p.api_format, p.prompt_cache_key_enabled,
 	       p.base_url, p.api_key_ciphertext, p.enabled, p.created_at, p.updated_at,
 	       ARRAY(
 	           SELECT m.external_id
@@ -478,7 +410,7 @@ const providerSelect = `
 	FROM provider_configs p`
 
 func (p *Postgres) ListProviders(ctx context.Context) ([]domain.ProviderConfig, error) {
-	rows, err := p.pool.Query(ctx, providerSelect+" ORDER BY p.created_at ASC")
+	rows, err := p.pool.Query(ctx, providerSelect+" ORDER BY p.channel_id ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -555,7 +487,7 @@ func (p *Postgres) UpdateProvider(ctx context.Context, item domain.ProviderConfi
 func (p *Postgres) DeleteProvider(ctx context.Context, id string) (domain.ProviderConfig, error) {
 	return scanProvider(p.pool.QueryRow(ctx, `
 		DELETE FROM provider_configs WHERE id = $1
-		RETURNING id, name, provider, api_format, prompt_cache_key_enabled, base_url,
+		RETURNING id, channel_id, name, provider, api_format, prompt_cache_key_enabled, base_url,
 		          api_key_ciphertext, enabled, created_at, updated_at, ARRAY[]::text[]`, id))
 }
 
@@ -606,7 +538,7 @@ func (p *Postgres) ListModels(ctx context.Context, availableOnly bool) ([]domain
 	if availableOnly {
 		query += " WHERE p.enabled = true AND p.api_key_ciphertext <> ''"
 	}
-	query += " ORDER BY p.created_at ASC, m.external_id ASC"
+	query += " ORDER BY p.channel_id ASC, m.external_id ASC"
 	rows, err := p.pool.Query(ctx, query)
 	if err != nil {
 		return nil, err

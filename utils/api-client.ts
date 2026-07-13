@@ -141,6 +141,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   }
   const response = await fetch(apiURL(path), {
     ...init,
+    cache: "no-store",
     headers,
     credentials: "include",
   });

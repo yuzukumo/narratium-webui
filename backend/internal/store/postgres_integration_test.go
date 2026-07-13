@@ -1317,25 +1317,40 @@ func TestPostgresProviderModelUpdatePreservesCustomCapabilities(t *testing.T) {
 	}
 }
 
-func TestPostgresDefaultCatalogInitializesOnlyOnce(t *testing.T) {
+func TestPostgresStartsWithEmptyProviderCatalog(t *testing.T) {
 	repository, ctx := newMigratedPostgresIntegrationStore(t)
-	if err := repository.EnsureDefaultCatalog(ctx); err != nil {
-		t.Fatalf("initialize default catalog: %v", err)
-	}
 	providers, err := repository.ListProviders(ctx)
-	if err != nil || len(providers) != 3 {
-		t.Fatalf("default providers=%d err=%v, want 3", len(providers), err)
+	if err != nil || len(providers) != 0 {
+		t.Fatalf("default providers=%d err=%v, want 0", len(providers), err)
 	}
 
-	const openAIProviderID = "10000000-0000-4000-8000-000000000001"
-	if _, err := repository.DeleteProvider(ctx, openAIProviderID); err != nil {
-		t.Fatalf("delete default provider: %v", err)
+	create := func(name string) domain.ProviderConfig {
+		t.Helper()
+		item, err := repository.CreateProvider(ctx, domain.ProviderConfig{
+			Name: name, Provider: "openai", APIFormat: domain.ProviderAPIFormatResponses,
+			BaseURL: "https://example.test", Models: []string{name + "-model"}, Enabled: true,
+		})
+		if err != nil {
+			t.Fatalf("create provider %s: %v", name, err)
+		}
+		return item
 	}
-	if err := repository.EnsureDefaultCatalog(ctx); err != nil {
-		t.Fatalf("repeat default catalog initialization: %v", err)
+
+	first := create("First")
+	second := create("Second")
+	if first.ChannelID != 1 || second.ChannelID != 2 {
+		t.Fatalf("channel IDs = %d, %d; want 1, 2", first.ChannelID, second.ChannelID)
 	}
-	if _, err := repository.ProviderByID(ctx, openAIProviderID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("deleted default provider returned error %v, want %v", err, ErrNotFound)
+	ordered, err := repository.ListProviders(ctx)
+	if err != nil || len(ordered) != 2 || ordered[0].ChannelID != first.ChannelID || ordered[1].ChannelID != second.ChannelID {
+		t.Fatalf("provider order=%v err=%v, want channel IDs [1 2]", ordered, err)
+	}
+	if _, err := repository.DeleteProvider(ctx, first.ID); err != nil {
+		t.Fatalf("delete first provider: %v", err)
+	}
+	third := create("Third")
+	if third.ChannelID <= second.ChannelID {
+		t.Fatalf("channel ID reused after deletion: %d <= %d", third.ChannelID, second.ChannelID)
 	}
 }
 

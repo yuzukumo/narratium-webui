@@ -89,6 +89,7 @@
         "generateContent": "Générer du contenu"
       },
       "columns": {
+        "id": "ID",
         "name": "Nom d'utilisateur",
         "type": "Type",
         "models": "Modèles",
@@ -108,6 +109,7 @@
         "newSubtitle": "Configurer une API de modèle en amont"
       },
       "form": {
+        "channelId": "ID du canal",
         "name": "Nom de la chaîne",
         "namePlaceholder": "Production OpenAI",
         "type": "Type de canal",

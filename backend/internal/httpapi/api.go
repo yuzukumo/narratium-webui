@@ -102,6 +102,7 @@ func (a *API) Router() *gin.Engine {
 	router.Use(a.recovery(), a.requestID(), a.securityHeaders(), a.corsAndOrigin(), a.bodyLimit())
 
 	v1 := router.Group("/api/v1")
+	v1.Use(a.noStoreAPI())
 	v1.GET("/health", a.health)
 	authRoutes := v1.Group("/auth")
 	authRoutes.GET("/bootstrap", a.bootstrap)
@@ -149,6 +150,14 @@ func (a *API) Router() *gin.Engine {
 
 	a.attachStatic(router)
 	return router
+}
+
+func (a *API) noStoreAPI() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "private, no-store")
+		c.Header("Vary", "Origin, Cookie, X-Narratium-User-ID")
+		c.Next()
+	}
 }
 
 func (a *API) health(c *gin.Context) {
