@@ -533,6 +533,8 @@ export default function CharacterPage() {
       parentNodeId?: string;
       promptDirectives?: string[];
       displayPrefix?: Message[];
+      onStarted?: () => void;
+      onFailed?: () => void;
     },
   ): Promise<boolean> => {
     if (!character || isSending || !message.trim()) return false;
@@ -589,6 +591,7 @@ export default function CharacterPage() {
       setIsSending(true);
       requestController = new AbortController();
       generationControllerRef.current = requestController;
+      options?.onStarted?.();
       
       setSuggestedInputs([]);
 
@@ -623,6 +626,7 @@ export default function CharacterPage() {
       }
       console.error("Error sending message:", err);
       upsertInlineErrorMessage(generationErrorMessage(err), assistantMessageId);
+      options?.onFailed?.();
 
       return false;
     } finally {
@@ -786,10 +790,11 @@ export default function CharacterPage() {
       hints.push(NARRATIVE_MODE_DIRECTIVES.sceneTransition);
     }
   
-    const sent = await handleSendMessage(rawMessage, { promptDirectives: hints });
-    if (sent) {
-      setUserInput("");
-    }
+    await handleSendMessage(rawMessage, {
+      promptDirectives: hints,
+      onStarted: () => setUserInput(""),
+      onFailed: () => setUserInput(rawMessage),
+    });
   };
 
   const toggleSidebar = () => {

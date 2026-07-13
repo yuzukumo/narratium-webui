@@ -111,7 +111,7 @@
       "form": {
         "channelId": "渠道 ID",
         "name": "渠道名称",
-        "namePlaceholder": "生产环境 OpenAI",
+        "namePlaceholder": "例如：OpenAI 主渠道",
         "type": "渠道类型",
         "apiFormat": "API 格式",
         "promptCacheKey": "发送提示词缓存键",

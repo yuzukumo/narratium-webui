@@ -111,7 +111,7 @@
       "form": {
         "channelId": "Channel ID",
         "name": "Channel name",
-        "namePlaceholder": "Production OpenAI",
+        "namePlaceholder": "e.g. OpenAI primary",
         "type": "Channel type",
         "apiFormat": "API format",
         "promptCacheKey": "Send prompt cache key",

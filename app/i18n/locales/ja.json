@@ -111,7 +111,7 @@
       "form": {
         "channelId": "チャンネル ID",
         "name": "チャンネル名",
-        "namePlaceholder": "プロダクション OpenAI",
+        "namePlaceholder": "例: OpenAI メインチャネル",
         "type": "チャネルの種類",
         "apiFormat": "APIフォーマット",
         "promptCacheKey": "プロンプト キャッシュ キーを送信する",

@@ -111,7 +111,7 @@
       "form": {
         "channelId": "頻道 ID",
         "name": "頻道名稱",
-        "namePlaceholder": "生產OpenAI",
+        "namePlaceholder": "例如：OpenAI 主要渠道",
         "type": "通道類型",
         "apiFormat": "API格式",
         "promptCacheKey": "發送提示快取密鑰",
