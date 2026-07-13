@@ -5,16 +5,274 @@
     "close": "关闭",
     "return": "返回",
     "settings": "设置",
-    "switchToEnglish": "切换为英文",
-    "switchToChinese": "切换为中文",
     "soundOn": "声音开启",
     "soundOff": "声音关闭",
-    "saving": "保存中...",
-    "defaultAutoFillFileName": "默认：自动填写文件名",
-    "exportData": "导出数据",
-    "importData": "导入数据",
-    "exportFailed": "导出失败，请重试",
-    "importFailed": "导入失败，请重试"
+    "saving": "保存中..."
+  },
+  "userMenu": {
+    "openMenu": "打开账户菜单",
+    "menuLabel": "账户菜单",
+    "settings": "设置",
+    "adminPanel": "管理面板",
+    "signOut": "退出登录"
+  },
+  "settings": {
+    "title": "设置",
+    "close": "关闭设置",
+    "tabs": {
+      "label": "设置分类",
+      "general": "通用",
+      "usage": "使用日志"
+    },
+    "general": {
+      "language": "语言",
+      "sound": "界面声音",
+      "soundOn": "已开启",
+      "soundOff": "已关闭", "avatarUpload": "上传头像", "avatarUploading": "上传中...", "avatarHint": "PNG、JPEG、WebP 或 GIF，最大 4 MB", "avatarInvalid": "请选择不超过 4 MB 的图片。", "avatarSaved": "头像已更新", "avatarError": "头像更新失败。", "availableBalance": "可用额度", "refreshBalance": "刷新额度", "name": "显示名称", "editName": "修改显示名称", "saveName": "保存显示名称", "nameSaved": "显示名称已更新", "nameError": "显示名称更新失败。"
+    },
+    "usage": {
+      "title": "使用日志", "description": "当前账户的模型请求和计费明细。",
+      "refresh": "刷新使用日志", "loadError": "使用日志加载失败。", "empty": "暂无使用记录。", "loadMore": "加载更多",
+      "character": "角色卡", "unknownCharacter": "未知角色卡", "model": "模型", "input": "输入", "output": "输出", "reasoning": "推理",
+      "cacheRead": "缓存读取", "cacheWrite": "缓存写入", "latency": "延迟", "firstToken": "首字", "totalTime": "总耗时", "cost": "费用", "time": "时间"
+    }
+  },
+  "notifications": {
+    "signOutSuccess": "已退出登录",
+    "signOutError": "退出失败，请重试",
+    "soundEnabled": "声音设置已保存：开启",
+    "soundDisabled": "声音设置已保存：关闭",
+    "languageSaved": "语言偏好已保存",
+    "modelSelectedNextRequest": "模型已切换，将从下一次请求生效",
+    "responseLengthSaved": "回复长度偏好已保存"
+  },
+  "preferences": {
+    "unavailable": "偏好设置不可用",
+    "loadError": "无法加载偏好设置。",
+    "retry": "重试",
+    "syncing": "正在同步偏好设置"
+  },
+  "admin": {
+    "title": "管理面板",
+    "loading": "正在加载管理数据...",
+    "actions": {
+      "back": "返回",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中..."
+    },
+    "tabs": {
+      "label": "管理面板页面",
+      "channels": "渠道",
+	  "models": "模型",
+      "users": "用户"
+    },
+    "status": {
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "channels": {
+      "title": "渠道",
+      "new": "新建渠道",
+      "countLabel": "渠道数量",
+      "deleteConfirm": "确定删除此渠道及其全部模型吗？",
+      "empty": "尚未配置渠道",
+      "types": {
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "gemini": "Gemini"
+      },
+      "apiFormats": {
+        "responses": "Responses",
+        "chatCompletions": "Chat Completions",
+        "messages": "Messages",
+        "generateContent": "Generate Content"
+      },
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "models": "模型",
+        "status": "状态",
+        "actions": "操作"
+      },
+      "actions": {
+        "edit": "编辑渠道",
+        "delete": "删除渠道",
+        "enable": "启用渠道",
+        "disable": "禁用渠道"
+      },
+      "drawer": {
+        "close": "关闭渠道编辑器",
+        "createTitle": "新建渠道",
+        "editTitle": "编辑渠道",
+        "newSubtitle": "配置上游模型 API"
+      },
+      "form": {
+        "name": "渠道名称",
+        "namePlaceholder": "生产环境 OpenAI",
+        "type": "渠道类型",
+        "apiFormat": "API 格式",
+        "promptCacheKey": "发送提示词缓存键",
+        "baseUrl": "Base URL",
+        "baseUrlPlaceholder": "https://api.example.com",
+        "apiKey": "API Key",
+        "apiKeyPlaceholder": "输入渠道 API Key",
+        "apiKeyKeepPlaceholder": "留空则保留当前 Key",
+        "models": "模型 ID",
+        "modelPlaceholder": "输入模型 ID",
+        "addModel": "添加模型",
+        "removeModel": "移除模型",
+        "modelsRequired": "请至少添加一个模型 ID"
+      }
+    },
+	"models": {
+	  "title": "模型",
+	  "countLabel": "模型数量",
+	  "empty": "尚未配置模型，请先在渠道中添加模型 ID。",
+	  "reasoningDisabled": "已关闭",
+	  "compactionShort": "压缩",
+	  "columns": {
+		"model": "模型 ID",
+		"channel": "渠道",
+		"context": "上下文长度",
+		"output": "最大输出",
+		"pricing": "计价",
+		"reasoning": "推理",
+		"actions": "操作"
+	  },
+	  "pricingShort": {
+		"input": "输入",
+		"output": "输出"
+	  },
+	  "actions": {
+		"edit": "编辑模型"
+	  },
+	  "drawer": {
+		"title": "编辑模型",
+		"close": "关闭模型编辑器"
+	  },
+	  "form": {
+		"contextWindow": "上下文长度",
+		"compactionThreshold": "压缩阈值",
+		"maxOutputTokens": "最大输出 Token",
+        "pricing": "模型定价",
+		"inputPrice": "输入",
+		"outputPrice": "输出",
+		"cacheReadPrice": "缓存读取",
+		"cacheCreationPrice": "缓存创建",
+        "pricePerMillion": "/1M",
+		"multiplier": "倍率",
+		"reasoning": "开启 reasoning",
+		"effort": "effort",
+		"customEffort": "自定义",
+		"customEffortPlaceholder": "输入上游接受的 effort",
+		"invalid": "请检查上下文、输出、计价和推理配置。"
+	  }
+	},
+    "users": {
+      "title": "用户",
+      "countLabel": "用户数量",
+      "currentAccount": "当前账户",
+      "empty": "未找到用户",
+      "registrationEnabled": "允许新用户注册",
+      "emailVerificationEnabled": "要求验证邮箱",
+      "roleLabel": "角色",
+      "statusLabel": "状态",
+      "columns": {
+        "name": "名称",
+        "role": "角色",
+        "status": "状态",
+		"balance": "剩余额度",
+		"createdAt": "创建时间",
+		"actions": "操作"
+      },
+      "roles": {
+        "user": "普通用户",
+        "admin": "管理员"
+      },
+      "statuses": {
+        "active": "正常",
+        "disabled": "已禁用"
+	  },
+	  "actions": {
+		"edit": "编辑用户"
+	  },
+	  "drawer": {
+		"title": "编辑用户",
+		"close": "关闭用户编辑器"
+	  },
+		"sections": {
+			"profile": "账户",
+			"balance": "额度",
+			"ledger": "最近额度记录",
+		"password": "重置密码"
+	  },
+	  "form": {
+		"name": "名称",
+		"email": "邮箱",
+		"amountUSD": "金额",
+		"note": "备注",
+		"newPassword": "新密码",
+		"resetPassword": "重置密码",
+		"passwordTooLong": "密码不能超过 72 个 UTF-8 字节。",
+		"invalidAmount": "请输入非负且最多包含 6 位小数的金额；增加和减少必须大于零。"
+	  },
+			"balance": {
+			"total": "额度",
+			"current": "当前额度",
+		"reserved": "已预留",
+		"available": "可用",
+		"add": "增加",
+			"subtract": "减少",
+			"override": "覆盖",
+			"apply": "调整额度",
+		"noLedger": "暂无额度记录",
+		"kinds": {
+			"adjustment": "额度调整",
+			"quota_add": "增加用户额度",
+			"quota_subtract": "减少用户额度",
+			"quota_override": "覆盖用户额度",
+		  "usage_charge": "模型消费"
+		}
+      }
+    },
+    "errors": {
+      "load": "无法加载管理数据。",
+      "channelSave": "无法保存渠道。",
+      "channelDelete": "无法删除渠道。",
+      "channelStatusUpdate": "无法更新渠道状态。",
+	  "modelSave": "无法保存模型。",
+      "userUpdate": "无法更新用户。",
+      "lastAdmin": "不能降级或禁用最后一名正常状态的管理员。",
+      "registrationUpdate": "无法更新注册设置。"
+    },
+    "toasts": {
+      "channelCreateSuccess": "渠道已创建",
+      "channelUpdateSuccess": "渠道已更新",
+      "channelSaveError": "渠道保存失败",
+      "channelDeleteSuccess": "渠道已删除",
+      "channelDeleteError": "渠道删除失败",
+      "channelEnabledSuccess": "渠道已启用",
+      "channelDisabledSuccess": "渠道已禁用",
+      "channelStatusUpdateError": "渠道状态更新失败",
+	  "modelUpdateSuccess": "模型已更新",
+	  "modelSaveError": "模型保存失败",
+      "userRoleSuccess": "用户角色已更新",
+      "userStatusSuccess": "用户状态已更新",
+      "userUpdateError": "用户更新失败",
+	  "userUpdateSuccess": "用户已更新",
+	  "passwordResetSuccess": "密码已重置",
+	  "passwordResetError": "密码重置失败",
+		  "balanceAdjustedSuccess": "调整额度成功",
+		  "balanceAdjustmentError": "调整额度失败",
+		  "ledgerLoadError": "额度记录加载失败",
+      "lastAdminError": "必须保留至少一名正常状态的管理员",
+      "registrationEnabledSuccess": "用户注册已开启",
+      "registrationDisabledSuccess": "用户注册已关闭",
+      "emailVerificationEnabledSuccess": "邮箱验证已开启",
+      "emailVerificationDisabledSuccess": "邮箱验证已关闭",
+      "registrationUpdateError": "注册设置更新失败"
+    }
   },
   "sidebar": {
     "home": "首页",
@@ -116,10 +374,28 @@
     "immediatelyStart": "立刻开始"
   },
   "auth": {
-    "username": "用户名",
+    "name": "名称",
+    "email": "邮箱",
+    "emailRequired": "请输入邮箱。",
+    "verificationCode": "验证码",
+    "sendCode": "发送验证码",
+    "verificationCodeSent": "验证码已发送至该邮箱。",
     "password": "密码",
     "login": "登录",
     "register": "注册",
+    "createFirstAdministrator": "创建首个管理员账户",
+    "signInToContinue": "登录以继续",
+    "signIn": "登录",
+    "createAccount": "创建账户",
+    "bootstrapSecret": "初始化密钥",
+    "confirmPassword": "确认密码",
+    "passwordsDoNotMatch": "两次输入的密码不一致。",
+    "unableToReachServer": "无法连接到服务。",
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "showBootstrapSecret": "显示初始化密钥",
+    "hideBootstrapSecret": "隐藏初始化密钥",
+    "pleaseWait": "请稍候",
     "welcomeBack": "欢迎回来",
     "continueJourney": "登录以继续您的旅程",
     "emailPlaceholder": "在此刻下你的名字",
@@ -188,6 +464,7 @@
     "initializeFailed": "游戏初始化失败",
     "setupFailed": "游戏设置失败",
     "cannotReadResponseStream": "无法读取响应流",
+    "insufficientQuota": "额度不足，请联系管理员增加额度。",
     "generatingStory": "正在生成故事...",
     "actionFailed": "游戏操作失败",
     "confirmDelete": "确定要删除这个故事吗？这个操作不可恢复。",
@@ -236,7 +513,7 @@
     "delete": "删除",
     "edit": "编辑",
     "chat": "聊天",
-    "recentlyCreated": "最近创建"
+    "recentlyCreated": "最近创建", "lastUsed": "上次使用"
   },
   "editCharacterModal": {
     "title": "编辑角色",
@@ -252,16 +529,29 @@
   },
   "importCharacterModal": {
     "title": "导入角色",
-    "description": "选择或拖放 SillyTavern 格式的 PNG 角色卡文件进行导入",
+    "description": "选择或拖放 SillyTavern 格式的 PNG、JSON 或 CharX 角色卡文件进行导入",
     "dragOrClick": "拖放文件到此处或点击选择",
-    "pngFormat": "仅支持 SillyTavern 格式的 PNG 角色卡文件",
-    "pngOnly": "请选择 SillyTavern 格式的 PNG 文件",
+    "pngFormat": "支持 SillyTavern 格式的 PNG、JSON 和 CharX 角色卡文件",
+    "pngOnly": "请选择 SillyTavern 格式的 PNG、JSON 或 CharX 角色卡文件",
     "noFileSelected": "请先选择文件",
     "uploadFailed": "上传失败，请重试",
+    "protagonistName": "主角名",
+    "protagonistNamePlaceholder": "用于替换 {{user}} 的名字",
+    "protagonistNameImmutable": "导入后将固定用于此角色，无法再次修改。",
+    "protagonistNameRequired": "导入前请填写主角名",
+    "enableEmbeddedRegex": "启用角色卡内嵌正则脚本",
     "import": "导入",
     "uploading": "正在上传..."
   },
   "characterChat": {
+    "selectModel": "选择模型",
+    "modelPrice": {
+      "input": "输入",
+      "output": "输出",
+      "unit": "$/1M"
+    },
+    "modelsLoading": "正在加载模型...",
+    "noModels": "暂无可用模型",
     "navigation": "导航",
     "characterInfo": "角色信息",
     "actions": "操作",
@@ -273,7 +563,12 @@
     "typeMessage": "输入消息...",
     "startConversation": "开始对话...",
     "send": "发送",
+    "stopGeneration": "停止生成",
+    "scrollToBottom": "滚动到底部",
+    "contextUsage": "上下文占用",
     "isTyping": "正在输入...",
+    "expandSuggestions": "展开建议",
+    "collapseSuggestions": "收起建议",
     "suggestedResponse1": "告诉我更多",
     "suggestedResponse2": "接下来发生了什么？",
     "suggestedResponse3": "你对此有什么感想？",
@@ -301,7 +596,8 @@
     "playerInput": "玩家输入指令",
     "characterStatus": "角色状态",
     "responseInstructions": "回复提示",
-    "responseLength": "模型回复长度",
+    "responseLength": "回复长度偏好",
+    "responseLengthHint": "提示词中的大致字符数目标（默认 {{default}}）。内容完整性优先，不会改变模型的最大输出 Token。",
     "customPrompt": "自定义提示词",
     "customPromptFor": "自定义提示词",
     "presets": "预设",
@@ -333,15 +629,28 @@
     "enterTagName": "输入标签名称...",
     "add": "添加",
     "saveChanges": "保存更改",
+    "saving": "保存中...",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败",
     "enterSymbol": "当输入 tag 时，将对<tag>...</tag>进行匹配",
-    "enableStreaming": "启用流式输出",
-    "disableStreaming": "禁用流式输出",
     "jumpToMessage": "跳转到此消息",
     "regenerateMessage": "重新生成消息",
-    "enableFastModel": "开启快速模式",
-    "disableFastModel": "关闭快速模式",
+    "editMessage": "编辑消息",
+    "alternativeReply": "候选回复",
+    "previousReply": "上一条回复",
+    "nextReply": "下一条回复",
     "requestFailed": "请求失败",
-    "errorRetryHint": "可以直接点击这条消息上的重新生成按钮重新请求。"
+	"errorRetryHint": "可以直接点击这条消息上的重新生成按钮重新请求。",
+	"metrics": {
+	  "cost": "消耗额度",
+	  "input": "输入",
+	  "cacheCreation": "缓存创建",
+	  "cacheRead": "缓存读取",
+	  "output": "输出",
+	  "firstToken": "首字",
+	  "totalTime": "总时间",
+	  "speed": "速度"
+	}
   },
   "preset": {
     "title": "预设编辑器",
@@ -421,7 +730,12 @@
     "cancel": "取消",
     "editPrompt": "编辑提示词",
     "promptContent": "提示词内容",
-    "saving": "保存中"
+    "saving": "保存中",
+    "save": "保存",
+    "edit": "编辑",
+    "deletePreset": "删除预设",
+    "promptUpdateSuccess": "提示词更新成功",
+    "promptUpdateFailed": "提示词更新失败"
   },
   "importPreset": {
     "title": "导入预设",
@@ -584,12 +898,17 @@
     "cancel": "取消",
     "saving": "保存中...",
     "positionOptions": {
-      "systemPromptStart": "系统提示开头",
-      "afterSystemPrompt": "系统提示之后",
-      "userMessageStart": "用户消息开头",
-      "afterResponseMode": "响应模式声明之后",
-      "basedOnDepth": "基于深度"
+      "systemPromptStart": "角色定义之前",
+      "afterSystemPrompt": "角色定义之后",
+      "authorNoteTop": "作者注释顶部",
+      "authorNoteBottom": "作者注释底部",
+      "basedOnDepth": "按深度插入",
+      "examplesTop": "示例消息顶部",
+      "examplesBottom": "示例消息底部",
+      "outlet": "命名出口"
     },
+    "outletName": "出口名称",
+    "outletNamePlaceholder": "供 {{outlet::name}} 使用的名称",
     "importFromJson": "从JSON导入",
     "importValidationFailed": "导入验证失败",
     "selectJsonFile": "选择JSON文件",
@@ -605,6 +924,11 @@
     "filterEnabled": "已启用",
     "filterDisabled": "已禁用",
     "filterImported": "全局",
+    "filtered": "已筛选",
+    "filterConstant": "常驻",
+    "deleteGlobalWorldBook": "删除全局世界书",
+    "globalWorldBookDeleted": "全局世界书已删除",
+    "failedToDeleteGlobalWorldBook": "删除全局世界书失败",
     "filteredCount": "筛选结果",
     "ascending": "升序",
     "descending": "降序",
@@ -687,27 +1011,9 @@
     "importErrors": "导入错误",
     "noGlobalRegexScripts": "暂无全局正则脚本",
     "createGlobalRegexScriptFirst": "请先创建全局正则脚本",
-    "selectGlobalRegexScript": "选择全局正则脚本"
-  },
-  "tour": {
-    "welcome": "欢迎使用 Narratium",
-    "welcomeDescription": "Narratium 是一个智能角色对话平台，您可以与各种AI角色进行深度对话，创造独特的故事体验。让我们先了解一下基本功能。",
-    "loginTitle": "首先登录账户",
-    "loginDescription": "点击这里登录。请注意：您输入的用户名可能会被AI角色用作主角名称，所以建议使用您希望在故事中使用的名字。",
-    "settingsTitle": "配置AI模型",
-    "settingsDescription": "登录后，点击右上角的设置按钮来配置您的AI模型。您可以选择OpenAI或Ollama，并设置相应的API密钥和模型参数。",
-    "worldbookTitle": "世界书功能",
-    "worldbookDescription": "世界书用于定义角色的背景世界、设定和重要信息。AI会根据世界书中的内容来保持角色设定的一致性，让对话更加沉浸。",
-    "regexTitle": "正则脚本",
-    "regexDescription": "正则脚本允许您自定义AI回复的格式和处理逻辑。您可以设置特殊的文本替换规则，让角色的表达方式更加独特。",
-    "presetTitle": "预设管理",
-    "presetDescription": "预设功能让您可以保存和管理不同的对话设置，包括角色的语气、风格和特殊指令，方便在不同场景下快速切换。",
-    "chatTitle": "开始对话",
-    "chatDescription": "现在您可以在输入框中输入消息，开始与AI角色的精彩对话了！AI会根据您设置的世界书、正则脚本和预设来回应。",
-    "next": "下一步",
-    "previous": "上一步",
-    "skip": "跳过",
-    "finish": "完成",
-    "resetTour": "重置引导"
+    "selectGlobalRegexScript": "选择全局正则脚本",
+    "deleteGlobalScript": "删除全局脚本",
+    "globalScriptDeleted": "全局脚本已删除",
+    "failedToDeleteGlobalScript": "删除全局脚本失败"
   }
 }

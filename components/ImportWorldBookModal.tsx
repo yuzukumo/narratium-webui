@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import { useLanguage } from "@/app/i18n";
 import { importWorldBookFromJson } from "@/function/worldbook/import";
 import { listGlobalWorldBooks, importFromGlobalWorldBook, GlobalWorldBook, deleteGlobalWorldBook } from "@/function/worldbook/global";
+import { isJSONFile } from "@/utils/file-types";
 
 interface ImportWorldBookModalProps {
   isOpen: boolean;
@@ -89,7 +90,7 @@ export default function ImportWorldBookModal({
   };
 
   const handleFileSelect = async (file: File) => {
-    if (!file.type.includes("json")) {
+    if (!isJSONFile(file)) {
       toast.error("Please select a JSON file");
       return;
     }

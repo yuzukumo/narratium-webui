@@ -21,6 +21,8 @@ export class RegexNode extends NodeBase {
   protected async _call(input: NodeInput): Promise<NodeOutput> {
     let llmResponse = input.llmResponse;
     const characterId = input.characterId;
+    const protagonistName = input.protagonistName;
+    const characterName = input.characterName;
     const responseUsage = input.responseUsage;
 
     if (!llmResponse) {
@@ -69,6 +71,8 @@ export class RegexNode extends NodeBase {
       "processRegex",
       mainContent,
       characterId,
+      protagonistName,
+      characterName,
     ) as { replacedText: string };
 
     return {

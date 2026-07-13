@@ -26,6 +26,7 @@ export async function saveAdvancedWorldBookEntry(
       selective: entry.selective !== undefined ? entry.selective : false,
       constant: entry.constant !== undefined ? entry.constant : false,
       position: entry.position !== undefined ? entry.position : 4,
+      outletName: entry.outletName?.trim() || entry.extensions?.outlet_name?.trim() || "",
       insertion_order: entry.insertion_order || 0,
       enabled: entry.enabled !== undefined ? entry.enabled : true,
       use_regex: entry.use_regex !== undefined ? entry.use_regex : false,
@@ -35,7 +36,8 @@ export async function saveAdvancedWorldBookEntry(
       extensions: {
         ...entry.extensions,
         position: typeof entry.position === "number" ? entry.position : 4,
-        depth: entry.depth || 1,
+        depth: entry.depth ?? 1,
+        outlet_name: entry.outletName?.trim() || "",
         updatedAt: now,
         createdAt: entry.extensions?.createdAt || now,
       },

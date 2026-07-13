@@ -5,6 +5,7 @@ import { toast } from "react-hot-toast";
 import { useLanguage } from "@/app/i18n";
 import { importRegexScriptFromJson } from "@/function/regex/import";
 import { listGlobalRegexScripts, importFromGlobalRegexScript, GlobalRegexScript, deleteGlobalRegexScript } from "@/function/regex/global";
+import { isJSONFile } from "@/utils/file-types";
 
 interface ImportRegexScriptModalProps {
   isOpen: boolean;
@@ -89,7 +90,7 @@ export default function ImportRegexScriptModal({
   };
 
   const handleFileSelect = async (file: File) => {
-    if (!file.type.includes("json")) {
+    if (!isJSONFile(file)) {
       toast.error("Please select a JSON file");
       return;
     }

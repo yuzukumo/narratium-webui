@@ -4,6 +4,7 @@ import React, { useState, useRef } from "react";
 import { toast } from "react-hot-toast";
 import { useLanguage } from "@/app/i18n";
 import { importPresetFromJson } from "@/function/preset/import";
+import { isJSONFile } from "@/utils/file-types";
 
 interface ImportPresetModalProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ export default function ImportPresetModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (file: File) => {
-    if (!file.type.includes("json")) {
+    if (!isJSONFile(file)) {
       toast.error(t("importPreset.selectJsonFile"));
       return;
     }

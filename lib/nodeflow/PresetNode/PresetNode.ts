@@ -21,10 +21,8 @@ export class PresetNode extends NodeBase {
   protected async _call(input: NodeInput): Promise<NodeOutput> {
     const characterId = input.characterId;
     const language = input.language || "zh";
-    const username = input.username;
     const charName = input.charName;
     const number = input.number;
-    const fastModel = input.fastModel;
 
     if (!characterId) {
       throw new Error("Character ID is required for PresetNode");
@@ -34,16 +32,16 @@ export class PresetNode extends NodeBase {
       "buildPromptFramework",
       characterId,
       language,
-      username,
       charName,
       number,
-      fastModel,
-    ) as { systemMessage: string; userMessage: string; presetId?: string };
+    ) as { systemMessage: string; userMessage: string; presetId?: string; protagonistName: string; characterName: string };
 
     return {
       systemMessage: result.systemMessage,
       userMessage: result.userMessage,
       presetId: result.presetId,
+      protagonistName: result.protagonistName,
+      characterName: result.characterName,
     };
   }
 } 

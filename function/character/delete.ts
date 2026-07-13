@@ -61,6 +61,21 @@ export async function deleteCharacter(character_id: string): Promise<{ success?:
         console.warn("Failed to delete avatar blob:", blobErr);
       }
     }
+    const embeddedAssets = character.data?.data?.extensions?.narratium_charx_assets;
+    if (Array.isArray(embeddedAssets)) {
+      const prefix = `characters/${character_id}/assets/`;
+      const assetPaths = embeddedAssets.flatMap((asset): string[] => {
+        if (!asset || typeof asset !== "object") return [];
+        const blobKey = (asset as { blob_key?: unknown }).blob_key;
+        return typeof blobKey === "string" && blobKey.startsWith(prefix) ? [blobKey] : [];
+      });
+      const results = await Promise.allSettled([...new Set(assetPaths)].map((path) => deleteBlob(path)));
+      for (const result of results) {
+        if (result.status === "rejected") {
+          console.warn("Failed to delete CharX asset blob:", result.reason);
+        }
+      }
+    }
 
     return { success: true };
   } catch (err: any) {

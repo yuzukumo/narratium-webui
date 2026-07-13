@@ -4,13 +4,12 @@
  * This file contains the home page implementation with the following features:
  * - Animated landing page with fantasy-themed UI
  * - Multi-language support
- * - User tour functionality for first-time visitors
  * - Responsive design with mobile support
  * 
  * Dependencies:
  * - framer-motion: For animations
  * - next/link: For client-side navigation
- * - Custom hooks: useLanguage, useTour
+ * - Custom language support
  */
 
 import { homeMetadata } from "./metadata";

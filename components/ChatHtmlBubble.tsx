@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, memo, useState, useCallback } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
+import sanitizeHtml from "sanitize-html";
 import { useSymbolColorStore } from "@/contexts/SymbolColorStore";
 import { useLanguage } from "@/app/i18n";
 
@@ -252,305 +253,154 @@ interface Props {
   onContentChange?: () => void;
 }
 
-const buildBubbleShell = () => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*,*::before,*::after{box-sizing:border-box;max-width:100%}html,body{margin:0;padding:0;color:#f4e8c1;font:16px/${1.5} serif;background:transparent;word-wrap:break-word;overflow-wrap:break-word;hyphens:auto;white-space:pre-wrap;overflow:hidden;}img,video,iframe{max-width:100%;height:auto;display:block;margin:0 auto}table{width:100%;border-collapse:collapse;overflow-x:auto;display:block}code,pre{font-family:monospace;font-size:0.9rem;white-space:pre-wrap;background:rgba(40,40,40,0.8);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);}pre{background:rgba(40,40,40,0.8);padding:12px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);margin:8px 0;}blockquote{margin:8px 0;padding:8px 12px;border-left:4px solid #93c5fd;background:rgba(147,197,253,0.08);border-radius:0 4px 4px 0;font-style:italic;color:#93c5fd;}strong{color:#fb7185;font-weight:bold;}em{color:#c4b5fd;font-style:italic;}.dialogue{color:#fda4af;}a{color:#93c5fd}.tag-styled{white-space:inherit;}</style></head><body><div id="content-wrapper"></div><script>
-let lastHeight = 0;
-let lastWidth = 0;
-let calculationCount = 0;
-const MAX_CALCULATIONS = 12;
-const MAX_CALCULATIONS_PER_SECOND = 8;
-const DEBOUNCE_TIME = 16;
-const SIGNIFICANT_CHANGE_THRESHOLD = 2;
+const SAFE_COLOR = /^(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([\d.%\s,/-]+\)|[a-z]{1,24}|transparent|currentcolor)$/i;
+const SAFE_TEXT_ALIGN = /^(?:left|right|center|justify|start|end)$/i;
+const SAFE_FONT_WEIGHT = /^(?:normal|bold|bolder|lighter|[1-9]00)$/i;
+const SAFE_WHITE_SPACE = /^(?:normal|pre|pre-wrap|pre-line|break-spaces)$/i;
 
-let calculationsInLastSecond = 0;
-let lastCalculationTime = 0;
-let pendingCalculationTimeout = null;
-let isCalculationThrottled = false;
+const ALLOWED_TAGS = [
+  "a", "abbr", "b", "blockquote", "br", "caption", "cite", "code", "col", "colgroup",
+  "dd", "del", "details", "div", "dl", "dt", "em", "figcaption", "figure", "h1", "h2",
+  "h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd", "li", "mark", "ol", "p",
+  "pre", "q", "rp", "rt", "ruby", "s", "samp", "section", "small", "span", "strike",
+  "strong", "sub", "summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr",
+  "u", "ul", "var", "talk", "bracket-content", "screen", "speech", "status_block", "thought",
+];
 
-const contentWrapper = document.getElementById('content-wrapper');
-
-function getAccurateHeight() {
-  return contentWrapper ? Math.max(contentWrapper.scrollHeight, contentWrapper.offsetHeight) : Math.max(
-    document.documentElement.scrollHeight,
-    document.body.scrollHeight,
-    document.documentElement.offsetHeight,
-    document.body.offsetHeight
-  );
-}
-
-function throttleCalculation(fn) {
-  const now = Date.now();
-  if (now - lastCalculationTime > 1000) {
-    calculationsInLastSecond = 0;
-    lastCalculationTime = now;
+function safeHTTPSURL(value: string | undefined): string | undefined {
+  if (!value || !/^https:\/\//i.test(value.trim())) {
+    return undefined;
   }
-
-  if (calculationsInLastSecond >= MAX_CALCULATIONS_PER_SECOND) {
-    if (!isCalculationThrottled) {
-      isCalculationThrottled = true;
-      setTimeout(() => {
-        isCalculationThrottled = false;
-        calculationsInLastSecond = 0;
-      }, 1000);
-    }
-    return;
-  }
-
-  calculationsInLastSecond++;
-  lastCalculationTime = now;
-  fn();
-}
-
-function debounceCalculation(fn) {
-  if (pendingCalculationTimeout) {
-    clearTimeout(pendingCalculationTimeout);
-  }
-  pendingCalculationTimeout = setTimeout(() => {
-    pendingCalculationTimeout = null;
-    throttleCalculation(fn);
-  }, DEBOUNCE_TIME);
-}
-
-function checkSizeChanges() {
   try {
-    if (calculationCount >= MAX_CALCULATIONS) {
-      return;
+    const parsed = new URL(value.trim());
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+      return undefined;
     }
-    calculationCount++;
-
-    const w = document.body.clientWidth;
-    const h = getAccurateHeight();
-
-    if (Math.abs(h - lastHeight) > SIGNIFICANT_CHANGE_THRESHOLD ||
-        Math.abs(w - lastWidth) > SIGNIFICANT_CHANGE_THRESHOLD) {
-      lastHeight = h;
-      lastWidth = w;
-      parent.postMessage({__chatBubbleHeight: h + 20, __chatBubbleWidth: w}, '*');
-    }
-  } catch (e) {
-    console.error('Height calculation error:', e);
+    return parsed.href;
+  } catch {
+    return undefined;
   }
 }
 
-function delayedChecks() {
-  setTimeout(() => debounceCalculation(checkSizeChanges), 32);
-  setTimeout(() => debounceCalculation(checkSizeChanges), 96);
-  setTimeout(() => debounceCalculation(checkSizeChanges), 240);
+function safeDimension(value: string | undefined): string | undefined {
+  return value && /^\d{1,4}$/.test(value) ? value : undefined;
 }
 
-window.__setChatBubbleContent = function(html) {
-  if (!contentWrapper) return;
-  contentWrapper.innerHTML = html;
-  calculationCount = 0;
-  checkSizeChanges();
-  delayedChecks();
-};
-
-window.addEventListener('load', function() {
-  calculationCount = 0;
-  checkSizeChanges();
-  delayedChecks();
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-  calculationCount = 0;
-  checkSizeChanges();
-});
-
-let resizeTimeout;
-window.addEventListener('resize', function() {
-  if (resizeTimeout) clearTimeout(resizeTimeout);
-  resizeTimeout = setTimeout(() => {
-    calculationCount = 0;
-    throttleCalculation(checkSizeChanges);
-  }, 100);
-});
-
-const resizeObserver = new ResizeObserver(function() {
-  debounceCalculation(() => {
-    calculationCount = 0;
-    checkSizeChanges();
+export function sanitizeChatHtml(html: string): string {
+  return sanitizeHtml(html, {
+    allowedTags: ALLOWED_TAGS,
+    allowedAttributes: {
+      "*": ["class", "data-tag", "style"],
+      a: ["href", "rel", "title"],
+      details: ["open"],
+      img: ["alt", "height", "src", "title", "width"],
+      col: ["span"],
+      colgroup: ["span"],
+      td: ["colspan", "rowspan"],
+      th: ["colspan", "rowspan", "scope"],
+    },
+    allowedSchemes: ["https"],
+    allowProtocolRelative: false,
+    allowedStyles: {
+      "*": {
+        color: [SAFE_COLOR],
+        "background-color": [SAFE_COLOR],
+        "font-style": [/^(?:normal|italic|oblique)$/i],
+        "font-weight": [SAFE_FONT_WEIGHT],
+        "text-align": [SAFE_TEXT_ALIGN],
+        "text-decoration": [/^(?:none|underline|line-through|overline)(?:\s+(?:underline|line-through|overline))*$/i],
+        "white-space": [SAFE_WHITE_SPACE],
+      },
+    },
+    transformTags: {
+      a: (tagName, attributes) => {
+        const href = safeHTTPSURL(attributes.href);
+        return {
+          tagName,
+          attribs: {
+            ...(href ? { href } : {}),
+            ...(attributes.title ? { title: attributes.title } : {}),
+            rel: "nofollow noreferrer noopener",
+          },
+        };
+      },
+      img: (tagName, attributes) => {
+        const src = safeHTTPSURL(attributes.src);
+        const width = safeDimension(attributes.width);
+        const height = safeDimension(attributes.height);
+        return {
+          tagName,
+          attribs: {
+            ...(src ? { src } : {}),
+            ...(attributes.alt ? { alt: attributes.alt } : {}),
+            ...(attributes.title ? { title: attributes.title } : {}),
+            ...(width ? { width } : {}),
+            ...(height ? { height } : {}),
+          },
+        };
+      },
+    },
+    exclusiveFilter: (frame) => frame.tag === "img" && !frame.attribs.src,
+    nonTextTags: ["script", "style", "textarea", "option", "noscript", "template"],
   });
-});
-
-resizeObserver.observe(document.body);
-if (contentWrapper) {
-  resizeObserver.observe(contentWrapper);
 }
 
-let lastRecalculateRequest = 0;
-window.addEventListener('message', function(e) {
-  if (e.data && e.data.__recalculateHeight) {
-    const now = Date.now();
-    if (now - lastRecalculateRequest < 300) {
-      return;
-    }
-    lastRecalculateRequest = now;
+export const CHAT_IFRAME_SANDBOX = "";
 
-    calculationCount = 0;
-    debounceCalculation(checkSizeChanges);
-    delayedChecks();
-  }
-});
-</script></body></html>`;
+export function buildChatBubbleDocument(content: string): string {
+  const sanitizedContent = sanitizeChatHtml(content);
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https:; font-src 'none'; media-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>*,*::before,*::after{box-sizing:border-box;max-width:100%}html,body{margin:0;padding:0;color:#f4e8c1;font:16px/${1.5} serif;background:transparent;word-wrap:break-word;overflow-wrap:break-word;hyphens:auto;white-space:pre-wrap;overflow:hidden}img{max-width:100%;height:auto;display:block;margin:0 auto}table{width:100%;border-collapse:collapse;overflow-x:auto;display:block}code,pre{font-family:monospace;font-size:0.9rem;white-space:pre-wrap;background:rgba(40,40,40,0.8);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1)}pre{padding:12px;margin:8px 0}blockquote{margin:8px 0;padding:8px 12px;border-left:4px solid #93c5fd;background:rgba(147,197,253,0.08);font-style:italic;color:#93c5fd}strong{color:#fb7185;font-weight:bold}em{color:#c4b5fd;font-style:italic}.dialogue,talk{color:#fda4af}a{color:#93c5fd}.tag-styled{white-space:inherit}</style></head><body><div id="content-wrapper">${sanitizedContent}</div></body></html>`;
+}
 
 export default memo(function ChatHtmlBubble({
   html: rawHtml,
   isLoading = false,
   onContentChange,
 }: Props) {
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  const [frameReady, setFrameReady] = useState(false);
   const { serifFontClass } = useLanguage();
-
-  const adjustHeightOnce = useCallback(() => {
-    const frame = frameRef.current;
-    if (!frame) return;
-    try {
-      const doc = frame.contentDocument || frame.contentWindow?.document;
-      if (!doc) return;
-      const wrapper = doc.getElementById("content-wrapper");
-      const h = wrapper
-        ? Math.max(wrapper.scrollHeight, wrapper.offsetHeight)
-        : Math.max(
-          doc.documentElement.scrollHeight || 0,
-          doc.body.scrollHeight || 0,
-        );
-      frame.style.height = `${h + 20}px`;
-    } catch (_) {
-    }
-  }, []);
-
-  const syncFrameHeight = useCallback(() => {
-    adjustHeightOnce();
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.requestAnimationFrame(() => adjustHeightOnce());
-    window.setTimeout(() => adjustHeightOnce(), 80);
-  }, [adjustHeightOnce]);
-
-  const updateBubbleContent = useCallback((html: string) => {
-    const frame = frameRef.current;
-    const win = frame?.contentWindow as (Window & {
-      __setChatBubbleContent?: (content: string) => void;
-    }) | null;
-
-    if (!win?.__setChatBubbleContent) {
-      return false;
-    }
-
-    win.__setChatBubbleContent(html);
-    syncFrameHeight();
-    frame?.contentWindow?.postMessage({ __recalculateHeight: true }, "*");
-    onContentChange?.();
-    return true;
-  }, [onContentChange, syncFrameHeight]);
-  
+  const contentRef = useRef<HTMLDivElement>(null);
+  const detailsStateRef = useRef(new Map<number, boolean>());
+  const onContentChangeRef = useRef(onContentChange);
   const isFullDoc = isCompleteHtmlDocument(rawHtml);
   const hasContent = rawHtml.trim() !== "";
-  if (isFullDoc) {
-    return (
-      <iframe
-        ref={frameRef}
-        sandbox="allow-scripts allow-same-origin"
-        srcDoc={rawHtml}
-        onLoad={adjustHeightOnce}
-        style={{
-          width: "100%",
-          border: 0,
-          overflow: "auto",
-          height: "600px",
-          background: "transparent",
-        }}
-      />
-    );
-  }
+  const initiallySanitizedHtml = hasContent
+    ? sanitizeChatHtml(isFullDoc ? rawHtml : convertMarkdown(rawHtml))
+    : "";
+  const formattedHtml = hasContent
+    ? (isFullDoc
+      ? initiallySanitizedHtml
+      : replaceTags(initiallySanitizedHtml).replace(/^[\s\r\n]+|[\s\r\n]+$/g, ""))
+    : "";
+  const sanitizedHtml = hasContent ? sanitizeChatHtml(formattedHtml) : "";
 
-  const processedHtml = (() => {
-    const md = convertMarkdown(rawHtml);
-    const tagged = replaceTags(md);
-    return tagged.replace(/^[\s\r\n]+|[\s\r\n]+$/g, "");
-  })();
-
-  useEffect(() => {
-    if (!frameReady || !hasContent) {
-      return;
-    }
-
-    updateBubbleContent(processedHtml);
-  }, [frameReady, hasContent, processedHtml, updateBubbleContent]);
-
-  const containerWidthRef = useRef<number | null>(null);
-  const lastResizeTimeRef = useRef<number>(0);
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    if (frameRef.current) {
-      containerWidthRef.current = frameRef.current.parentElement?.clientWidth || null;
-    }
-    
-    const handler = (e: MessageEvent) => {
-      if (
-        e.source === frameRef.current?.contentWindow &&
-        typeof e.data === "object" &&
-        e.data.__chatBubbleHeight
-      ) {
-        frameRef.current!.style.height = `${e.data.__chatBubbleHeight}px`;
-        onContentChange?.();
-        const currentWidth = frameRef.current.parentElement?.clientWidth || 0;
-        if (
-          containerWidthRef.current && 
-          Math.abs(currentWidth - containerWidthRef.current) > (containerWidthRef.current * 0.1)
-        ) {
-          const now = Date.now();
-          if (now - lastResizeTimeRef.current > 500) {
-            lastResizeTimeRef.current = now;
-            containerWidthRef.current = currentWidth;
-            frameRef.current.contentWindow?.postMessage({ __recalculateHeight: true }, "*");
-          }
-        }
-      }
-    };
-    
-    window.addEventListener("message", handler);
-
-    const resizeHandler = () => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      
-      resizeTimeoutRef.current = setTimeout(() => {
-        if (frameRef.current && frameRef.current.contentWindow) {
-          const now = Date.now();
-          if (now - lastResizeTimeRef.current > 300) {
-            lastResizeTimeRef.current = now;
-            frameRef.current.contentWindow.postMessage({ __recalculateHeight: true }, "*");
-          }
-        }
-      }, 200);
-    };
-    
-    window.addEventListener("resize", resizeHandler);
-    
-    return () => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      window.removeEventListener("message", handler);
-      window.removeEventListener("resize", resizeHandler);
-    };
-  }, [frameReady, onContentChange]);
-
-  useEffect(() => {
-    if (!onContentChange) return;
-    const frame = frameRef.current;
-    if (!frame) return;
-    const ro = new ResizeObserver(() => onContentChange());
-    ro.observe(frame);
-    return () => ro.disconnect();
+  useLayoutEffect(() => {
+    onContentChangeRef.current = onContentChange;
   }, [onContentChange]);
+
+  useLayoutEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+
+    // Streaming replaces the HTML subtree. Preserve each details element's
+    // user-controlled state across those replacements instead of deriving it
+    // from the latest response text.
+    const state = detailsStateRef.current;
+    const previousDetails = Array.from(container.querySelectorAll("details"));
+    previousDetails.forEach((details, index) => state.set(index, details.open));
+
+    container.innerHTML = sanitizedHtml;
+    const listeners: Array<() => void> = [];
+    Array.from(container.querySelectorAll("details")).forEach((details, index) => {
+      if (state.has(index)) {
+        details.open = state.get(index) === true;
+      }
+      const rememberToggle = () => state.set(index, details.open);
+      details.addEventListener("toggle", rememberToggle);
+      listeners.push(() => details.removeEventListener("toggle", rememberToggle));
+    });
+    onContentChangeRef.current?.();
+    return () => listeners.forEach((remove) => remove());
+  }, [sanitizedHtml]);
 
   if (!hasContent && isLoading) {
     return <div className="min-h-[12px]" aria-hidden="true" />;
@@ -567,12 +417,70 @@ export default memo(function ChatHtmlBubble({
   }
 
   return (
-    <div className="chat-bubble-container" style={{ maxWidth: "calc(100% - 10px)", margin: "0 auto" }}>
-      <style jsx>{`
+    <div className="chat-bubble-container">
+      <style jsx global>{`
         .chat-bubble-container {
           width: 100%;
           position: relative;
           max-width: 780px;
+          margin: 0 auto;
+          padding-inline: 5px;
+        }
+        .chat-html-content {
+          color: #f4e8c1;
+          font-size: 16px;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+          white-space: pre-wrap;
+        }
+        .chat-html-content img {
+          display: block;
+          height: auto;
+          max-width: 100%;
+          margin: 0 auto;
+        }
+        .chat-html-content table {
+          display: block;
+          width: 100%;
+          overflow-x: auto;
+          border-collapse: collapse;
+        }
+        .chat-html-content code,
+        .chat-html-content pre {
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+          background: rgba(40, 40, 40, 0.8);
+          font-family: monospace;
+          font-size: 0.9rem;
+          white-space: pre-wrap;
+        }
+        .chat-html-content code { padding: 4px 8px; }
+        .chat-html-content pre { margin: 8px 0; padding: 12px; }
+        .chat-html-content blockquote {
+          margin: 8px 0;
+          padding: 8px 12px;
+          border-left: 4px solid #93c5fd;
+          background: rgba(147, 197, 253, 0.08);
+          color: #93c5fd;
+          font-style: italic;
+        }
+        .chat-html-content strong { color: #fb7185; }
+        .chat-html-content em { color: #c4b5fd; }
+        .chat-html-content talk,
+        .chat-html-content .dialogue { color: #fda4af; }
+        .chat-html-content a { color: #93c5fd; }
+        .chat-html-content .tag-styled { white-space: inherit; }
+        .chat-html-content > :first-child { margin-top: 0; }
+        .chat-html-content > :last-child { margin-bottom: 0; }
+        .chat-html-content details > summary { cursor: pointer; }
+        .chat-html-content hr { border-color: rgba(161, 141, 111, 0.35); }
+        .chat-html-content h1,
+        .chat-html-content h2,
+        .chat-html-content h3,
+        .chat-html-content h4,
+        .chat-html-content h5,
+        .chat-html-content h6 {
+          letter-spacing: 0;
         }
         @media (max-width: 880px) {
           .chat-bubble-container {
@@ -580,24 +488,9 @@ export default memo(function ChatHtmlBubble({
           }
         }
       `}</style>
-      <iframe
-        ref={frameRef}
-        sandbox="allow-scripts allow-same-origin"
-        srcDoc={buildBubbleShell()}
-        onLoad={() => {
-          setFrameReady(true);
-          syncFrameHeight();
-          if (hasContent) {
-            updateBubbleContent(processedHtml);
-          }
-        }}
-        style={{ 
-          width: "100%", 
-          border: 0, 
-          overflow: "hidden", 
-          height: "150px", 
-          background: "transparent",
-        }}
+      <div
+        ref={contentRef}
+        className={`chat-html-content ${serifFontClass}`}
       />
     </div>
   );

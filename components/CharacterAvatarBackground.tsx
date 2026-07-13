@@ -5,21 +5,32 @@ export function CharacterAvatarBackground({ avatarPath }: { avatarPath: string }
   const [bgUrl, setBgUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     let objectUrl: string;
 
     async function loadImage() {
-      const blob = await getBlob(avatarPath);
-      if (blob) {
-        objectUrl = URL.createObjectURL(blob);
-        setBgUrl(objectUrl);
-      } else {
-        console.warn("Avatar blob not found for", avatarPath);
+      try {
+        const blob = await getBlob(avatarPath);
+        if (cancelled) {
+          return;
+        }
+        if (blob) {
+          objectUrl = URL.createObjectURL(blob);
+          setBgUrl(objectUrl);
+        } else {
+          console.warn("Avatar blob not found for", avatarPath);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load avatar blob:", error);
+        }
       }
     }
 
-    loadImage();
+    void loadImage();
 
     return () => {
+      cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [avatarPath]);

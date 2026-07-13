@@ -1,238 +1,317 @@
-const DB_NAME = "CharacterAppDB";
-const DB_VERSION = 4;
+import { apiFetch, apiJSON, APIError, parseAPIError } from "@/utils/api-client";
 
 export const CHARACTERS_RECORD_FILE = "characters_record";
 export const CHARACTER_DIALOGUES_FILE = "character_dialogues";
-export const CHARACTER_IMAGES_FILE = "character_images";
 export const WORLD_BOOK_FILE = "world_book";
 export const REGEX_SCRIPTS_FILE = "regex_scripts";
 export const PRESET_FILE = "preset_data";
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+const DOCUMENT_STORES = [
+  CHARACTERS_RECORD_FILE,
+  CHARACTER_DIALOGUES_FILE,
+  WORLD_BOOK_FILE,
+  REGEX_SCRIPTS_FILE,
+  PRESET_FILE,
+] as const;
 
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+interface DocumentResponse<T = unknown> {
+  namespace: string;
+  value: T;
+  revision: number;
+  updated_at?: string;
+}
 
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(CHARACTERS_RECORD_FILE)) {
-        db.createObjectStore(CHARACTERS_RECORD_FILE);
-      }
-      if (!db.objectStoreNames.contains(CHARACTER_DIALOGUES_FILE)) {
-        db.createObjectStore(CHARACTER_DIALOGUES_FILE);
-      }
-      if (!db.objectStoreNames.contains(CHARACTER_IMAGES_FILE)) {
-        db.createObjectStore(CHARACTER_IMAGES_FILE);
-      }
-      if (!db.objectStoreNames.contains(WORLD_BOOK_FILE)) {
-        db.createObjectStore(WORLD_BOOK_FILE);
-      }
-      if (!db.objectStoreNames.contains(REGEX_SCRIPTS_FILE)) {
-        db.createObjectStore(REGEX_SCRIPTS_FILE);
-      }
-      if (!db.objectStoreNames.contains(PRESET_FILE)) {
-        db.createObjectStore(PRESET_FILE);
-      }
-    };
-  });
+interface BlobMetadata {
+  key: string;
+  content_type: string;
+  size: number;
+  revision: number;
+  updated_at: string;
+}
+
+interface BlobPage {
+  items: BlobMetadata[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+type BlobWriteResponse = BlobMetadata;
+
+const BLOB_PAGE_LIMIT = 200;
+
+const revisions = new Map<string, number>();
+const blobRevisions = new Map<string, number>();
+const revisionSnapshots = new WeakMap<object, {
+  generation: number;
+  namespace: string;
+  revision: number;
+}>();
+let cacheGeneration = 0;
+let blobMetadataLoaded = false;
+
+export function clearDataRevisionCache(): void {
+  revisions.clear();
+  blobRevisions.clear();
+  blobMetadataLoaded = false;
+  cacheGeneration += 1;
+}
+
+function accountChangedError(): Error {
+  return new Error("The signed-in account changed while data was being synchronized.");
+}
+
+function assertCurrentGeneration(generation: number): void {
+  if (generation !== cacheGeneration) {
+    throw accountChangedError();
+  }
+}
+
+function rememberRevision(storeName: string, data: unknown[], revision: number): void {
+  const snapshot = {
+    generation: cacheGeneration,
+    namespace: storeName,
+    revision,
+  };
+  revisionSnapshots.set(data, snapshot);
+  for (const item of data) {
+    if (item && typeof item === "object") {
+      revisionSnapshots.set(item, snapshot);
+    }
+  }
+}
+
+function revisionForData(storeName: string, data: unknown[]): number | undefined {
+  const candidates = [data, ...data.filter((item): item is object => Boolean(item) && typeof item === "object")];
+  for (const candidate of candidates) {
+    const snapshot = revisionSnapshots.get(candidate);
+    if (!snapshot || snapshot.namespace !== storeName) {
+      continue;
+    }
+    if (snapshot.generation !== cacheGeneration) {
+      throw accountChangedError();
+    }
+    return snapshot.revision;
+  }
+  return undefined;
+}
+
+export function inheritDataRevision(
+  storeName: string,
+  source: unknown[],
+  target: unknown[],
+): void {
+  assertDocumentStore(storeName);
+  const revision = revisionForData(storeName, source);
+  if (revision !== undefined) {
+    rememberRevision(storeName, target, revision);
+  }
 }
 
 export async function readData(storeName: string): Promise<any[]> {
-  await initializeDataFiles();
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, "readonly");
-    const store = tx.objectStore(storeName);
-    const request = store.get("data");
-
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-  });
+  assertDocumentStore(storeName);
+  const generation = cacheGeneration;
+  const document = await apiJSON<DocumentResponse<any[]>>(`/api/v1/data/${encodeURIComponent(storeName)}`);
+  assertCurrentGeneration(generation);
+  const data = Array.isArray(document.value) ? document.value : [];
+  revisions.set(storeName, document.revision);
+  rememberRevision(storeName, data, document.revision);
+  return data;
 }
 
 export async function writeData(storeName: string, data: any[]): Promise<void> {
-  await initializeDataFiles();
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, "readwrite");
-    const store = tx.objectStore(storeName);
-    const request = store.put(data, "data");
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  assertDocumentStore(storeName);
+  const generation = cacheGeneration;
+  let expectedRevision = revisionForData(storeName, data) ?? revisions.get(storeName);
+  if (expectedRevision === undefined) {
+    const current = await apiJSON<DocumentResponse>(`/api/v1/data/${encodeURIComponent(storeName)}`);
+    assertCurrentGeneration(generation);
+    expectedRevision = current.revision;
+  }
+  try {
+    assertCurrentGeneration(generation);
+    const document = await apiJSON<DocumentResponse>(`/api/v1/data/${encodeURIComponent(storeName)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value: data, expected_revision: expectedRevision }),
+    });
+    assertCurrentGeneration(generation);
+    revisions.set(storeName, document.revision);
+    rememberRevision(storeName, data, document.revision);
+  } catch (error) {
+    assertCurrentGeneration(generation);
+    if (error instanceof APIError && error.status === 409) {
+      revisions.delete(storeName);
+      throw new Error("Data changed on another device. Reload and retry the operation.");
+    }
+    throw error;
+  }
 }
 
 export async function initializeDataFiles(): Promise<void> {
-  const db = await openDB();
-
-  const storeNames = [
-    CHARACTERS_RECORD_FILE, 
-    CHARACTER_DIALOGUES_FILE, 
-    CHARACTER_IMAGES_FILE,
-    WORLD_BOOK_FILE,
-    PRESET_FILE,
-    REGEX_SCRIPTS_FILE,
-  ];
-
-  await Promise.all(storeNames.map(storeName => {
-    return new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(storeName, "readwrite");
-      const store = tx.objectStore(storeName);
-      const getRequest = store.get("data");
-
-      getRequest.onsuccess = () => {
-        if (getRequest.result === undefined) {
-          const putRequest = store.put([], "data");
-          putRequest.onsuccess = () => resolve();
-          putRequest.onerror = () => reject(putRequest.error);
-        } else {
-          resolve();
-        }
-      };
-
-      getRequest.onerror = () => reject(getRequest.error);
-    });
+  const generation = cacheGeneration;
+  await Promise.all(DOCUMENT_STORES.map(async (storeName) => {
+    assertCurrentGeneration(generation);
+    if (!revisions.has(storeName)) {
+      await readData(storeName);
+    }
   }));
+  assertCurrentGeneration(generation);
 }
 
 export async function setBlob(key: string, blob: Blob): Promise<void> {
-  await initializeDataFiles();
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(CHARACTER_IMAGES_FILE, "readwrite");
-    const store = tx.objectStore(CHARACTER_IMAGES_FILE);
-    const request = store.put(blob, key);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+  const generation = cacheGeneration;
+  const expectedRevision = await revisionForBlob(key, generation);
+  assertCurrentGeneration(generation);
+  const response = await apiFetch(`/api/v1/blobs/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": blob.type || "application/octet-stream",
+      "If-Match": formatRevisionETag(expectedRevision),
+    },
+    body: blob,
   });
+  assertCurrentGeneration(generation);
+  if (!response.ok) {
+    await throwBlobWriteError(response, key, generation);
+  }
+  const saved = await response.json() as BlobWriteResponse;
+  assertCurrentGeneration(generation);
+  if (!isPositiveRevision(saved.revision)) {
+    blobMetadataLoaded = false;
+    throw new Error("The server returned an invalid blob revision.");
+  }
+  blobRevisions.set(key, saved.revision);
 }
 
 export async function getBlob(key: string): Promise<Blob | null> {
-  await initializeDataFiles();
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(CHARACTER_IMAGES_FILE, "readonly");
-    const store = tx.objectStore(CHARACTER_IMAGES_FILE);
-    const request = store.get(key);
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error);
-  });
+  const generation = cacheGeneration;
+  const response = await apiFetch(`/api/v1/blobs/${encodeURIComponent(key)}`);
+  assertCurrentGeneration(generation);
+  if (response.status === 404) {
+    blobRevisions.delete(key);
+    return null;
+  }
+  if (!response.ok) {
+    throw await parseAPIError(response);
+  }
+  const blob = await response.blob();
+  assertCurrentGeneration(generation);
+  rememberBlobETag(key, response.headers.get("ETag"));
+  return blob;
 }
 
 export async function deleteBlob(key: string): Promise<void> {
-  await initializeDataFiles();
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(CHARACTER_IMAGES_FILE, "readwrite");
-    const store = tx.objectStore(CHARACTER_IMAGES_FILE);
-    const request = store.delete(key);
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+  const generation = cacheGeneration;
+  const expectedRevision = await revisionForBlob(key, generation, true);
+  assertCurrentGeneration(generation);
+  if (expectedRevision === 0) {
+    return;
+  }
+  const response = await apiFetch(`/api/v1/blobs/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+    headers: { "If-Match": formatRevisionETag(expectedRevision) },
   });
+  assertCurrentGeneration(generation);
+  if (!response.ok) {
+    await throwBlobWriteError(response, key, generation);
+  }
+  blobRevisions.delete(key);
 }
 
-export async function exportAllData(): Promise<Record<string, any>> {
-  const db = await openDB();
-  const exportData: Record<string, any> = {};
-  
-  // Handle regular data stores
-  const regularStores = [
-    CHARACTERS_RECORD_FILE,
-    CHARACTER_DIALOGUES_FILE,
-    WORLD_BOOK_FILE,
-    REGEX_SCRIPTS_FILE,
-  ];
-
-  for (const storeName of regularStores) {
-    const data = await readData(storeName);
-    exportData[storeName] = data;
+function assertDocumentStore(storeName: string): void {
+  if (!DOCUMENT_STORES.includes(storeName as typeof DOCUMENT_STORES[number])) {
+    throw new Error(`Unsupported data store: ${storeName}`);
   }
+}
 
-  // Handle image data separately
-  const imageData = await readData(CHARACTER_IMAGES_FILE);
-  const imageBlobs: Array<{key: string, data: string}> = [];
-  
-  // Get all keys from the image store
-  const tx = db.transaction(CHARACTER_IMAGES_FILE, "readonly");
-  const store = tx.objectStore(CHARACTER_IMAGES_FILE);
-  const keys = await new Promise<string[]>((resolve) => {
-    const request = store.getAllKeys();
-    request.onsuccess = () => resolve(request.result as string[]);
-  });
+async function revisionForBlob(
+  key: string,
+  generation: number,
+  refreshWhenMissing = false,
+): Promise<number> {
+  const knownRevision = blobRevisions.get(key);
+  if (knownRevision !== undefined) {
+    return knownRevision;
+  }
+  if (!blobMetadataLoaded || refreshWhenMissing) {
+    await loadAllBlobMetadata(generation);
+  }
+  assertCurrentGeneration(generation);
+  return blobRevisions.get(key) ?? 0;
+}
 
-  // Read each image blob and convert to base64
-  for (const key of keys) {
-    const blob = await getBlob(key);
-    if (blob && blob instanceof Blob) {
-      try {
-        const base64 = await blobToBase64(blob);
-        imageBlobs.push({ key, data: base64 });
-      } catch (error) {
-        console.error(`Failed to convert image ${key} to base64:`, error);
-      }
+async function loadAllBlobMetadata(generation: number): Promise<BlobMetadata[]> {
+  const items: BlobMetadata[] = [];
+  let offset = 0;
+  while (true) {
+    const page = await apiJSON<BlobPage>(
+      `/api/v1/blobs?limit=${BLOB_PAGE_LIMIT}&offset=${offset}`,
+    );
+    assertCurrentGeneration(generation);
+    if (
+      !Array.isArray(page.items)
+      || !Number.isSafeInteger(page.total)
+      || page.total < 0
+      || !Number.isSafeInteger(page.limit)
+      || page.limit <= 0
+      || page.offset !== offset
+    ) {
+      throw new Error("The server returned invalid blob pagination metadata.");
     }
-  }
-  
-  exportData[CHARACTER_IMAGES_FILE] = imageBlobs;
-
-  return exportData;
-}
-
-export async function importAllData(data: Record<string, any>): Promise<void> {
-  const db = await openDB();
-  
-  // Handle regular data stores
-  const regularStores = [
-    CHARACTERS_RECORD_FILE,
-    CHARACTER_DIALOGUES_FILE,
-    WORLD_BOOK_FILE,
-    REGEX_SCRIPTS_FILE,
-  ];
-
-  for (const storeName of regularStores) {
-    if (data[storeName]) {
-      await writeData(storeName, data[storeName]);
+    items.push(...page.items);
+    const nextOffset = offset + page.items.length;
+    if (page.items.length === 0 || nextOffset >= page.total) {
+      break;
     }
+    offset = nextOffset;
   }
 
-  // Handle image data separately
-  if (data[CHARACTER_IMAGES_FILE]) {
-    for (const item of data[CHARACTER_IMAGES_FILE]) {
-      if (typeof item.data === "string") {
-        const blob = await base64ToBlob(item.data);
-        await setBlob(item.key, blob);
-      }
+  assertCurrentGeneration(generation);
+  blobRevisions.clear();
+  for (const item of items) {
+    if (!isPositiveRevision(item.revision)) {
+      blobMetadataLoaded = false;
+      throw new Error("The server returned an invalid blob revision.");
     }
+    blobRevisions.set(item.key, item.revision);
+  }
+  blobMetadataLoaded = true;
+  return items;
+}
+
+function formatRevisionETag(revision: number): string {
+  return `"${revision}"`;
+}
+
+function rememberBlobETag(key: string, value: string | null): void {
+  if (!value) {
+    return;
+  }
+  const match = /^"([1-9][0-9]*)"$/.exec(value);
+  if (!match) {
+    return;
+  }
+  const revision = Number(match[1]);
+  if (isPositiveRevision(revision)) {
+    blobRevisions.set(key, revision);
   }
 }
 
-// Helper function to convert Blob to base64
-async function blobToBase64(blob: Blob): Promise<string> {
-  if (!(blob instanceof Blob)) {
-    throw new Error("Input is not a valid Blob object");
+function isPositiveRevision(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
+async function throwBlobWriteError(
+  response: Response,
+  key: string,
+  generation: number,
+): Promise<never> {
+  const error = await parseAPIError(response);
+  assertCurrentGeneration(generation);
+  if (error.status === 409 && error.code === "revision_conflict") {
+    blobRevisions.delete(key);
+    blobMetadataLoaded = false;
+    throw new Error("Blob changed on another device. Reload and retry the operation.");
   }
-  
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Failed to convert blob to base64"));
-      }
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  throw error;
 }
-
-// Helper function to convert base64 to Blob
-async function base64ToBlob(base64: string): Promise<Blob> {
-  const response = await fetch(base64);
-  return response.blob();
-}
-

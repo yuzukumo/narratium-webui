@@ -3,7 +3,6 @@ import { NodeConfig, NodeInput, NodeOutput, NodeCategory } from "@/lib/nodeflow/
 import { LLMNodeTools } from "./LLMNodeTools";
 import { NodeToolRegistry } from "../NodeTool";
 import { ResponseUsageMetrics } from "@/lib/models/parsed-response";
-import { ApiProvider } from "@/utils/api-config";
 
 export class LLMNode extends NodeBase {
   static readonly nodeName = "llm";
@@ -23,10 +22,7 @@ export class LLMNode extends NodeBase {
   protected async _call(input: NodeInput): Promise<NodeOutput> {    
     const systemMessage = input.systemMessage;
     const userMessage = input.userMessage;
-    const modelName = input.modelName;
-    const apiKey = input.apiKey;
-    const baseUrl = input.baseUrl;
-    const llmType = (input.llmType || "openai") as ApiProvider;
+    const modelId = input.modelId;
     const temperature = input.temperature;
     const language = input.language || "zh";
     const maxTokens = input.number;
@@ -44,14 +40,10 @@ export class LLMNode extends NodeBase {
       systemMessage,
       userMessage,
       {
-        modelName,
-        apiKey,
-        baseUrl,
-        llmType,
+        modelId,
         temperature,
         language,
         maxTokens,
-        reasoningEffort: input.reasoningEffort,
       },
     ) as { text: string; usage: ResponseUsageMetrics };
 
@@ -60,8 +52,7 @@ export class LLMNode extends NodeBase {
       responseUsage: llmResult.usage,
       systemMessage,
       userMessage,
-      modelName,
-      llmType,
+      modelId,
     };
   }
 } 

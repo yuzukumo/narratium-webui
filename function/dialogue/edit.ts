@@ -4,18 +4,14 @@ import { parseEvent } from "@/utils/response-parser";
 import { DialogueNode } from "@/lib/models/node-model";
 import { LocalCharacterRecordOperations } from "@/lib/data/character-record-operation";
 import { Character } from "@/lib/core/character";
-import { ApiProvider, ReasoningEffort } from "@/utils/api-config";
+import type { Language } from "@/lib/i18n/languages";
 
 interface EditDialogueNodeRequest {
   characterId: string;
   nodeId: string;
   assistantResponse: string;
-  model_name: string;
-  api_key: string;
-  base_url: string;
-  llm_type: ApiProvider;
+  model_id: string;
   language: string;
-  reasoning_effort?: ReasoningEffort;
 }
 
 export async function editDialaogueNodeContent(input: EditDialogueNodeRequest) {
@@ -24,12 +20,8 @@ export async function editDialaogueNodeContent(input: EditDialogueNodeRequest) {
       characterId, 
       nodeId, 
       assistantResponse,
-      model_name,
-      api_key,
-      base_url,
-      llm_type,
+      model_id,
       language,
-      reasoning_effort,
     } = input;
     
     const dialogueTree = await LocalCharacterDialogueOperations.getDialogueTreeById(characterId);
@@ -47,12 +39,8 @@ export async function editDialaogueNodeContent(input: EditDialogueNodeRequest) {
     
     const dialogue = new CharacterDialogue(character);
     await dialogue.initialize({
-      modelName: model_name,
-      apiKey: api_key,
-      baseUrl: base_url,
-      llmType: llm_type,
-      language: language as "zh" | "en",
-      reasoningEffort: reasoning_effort,
+      modelId: model_id,
+      language: language as Language,
     });
     
     let summary = "";

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLanguage } from "@/app/i18n";
-import ReactFlow, {
+import {
+  ReactFlow,
   MiniMap,
   Background,
   useNodesState,
@@ -16,8 +17,8 @@ import ReactFlow, {
   Position,
   NodeProps,
   ReactFlowInstance,
-} from "reactflow";
-import "reactflow/dist/style.css";
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { trackButtonClick } from "@/utils/google-analytics";
 import { switchDialogueBranch } from "@/function/dialogue/truncate";
 import { getCharacterDialogue } from "@/function/dialogue/info";
@@ -31,8 +32,7 @@ interface DialogueTreeModalProps {
   onDialogueEdit?: () => void;
 }
 
-interface DialogueNode extends Node {
-  data: {
+type DialogueNodeData = {
     label: string;
     fullContent: string;
     userInput: string;
@@ -42,10 +42,11 @@ interface DialogueNode extends Node {
     onJumpClick: (id: string) => void;
     isCurrentPath: boolean;
     characterId: string;
-  };
-}
+};
 
-function DialogueNodeComponent({ id, data }: NodeProps<DialogueNode["data"]>) {
+type DialogueNode = Node<DialogueNodeData, "dialogueNode">;
+
+function DialogueNodeComponent({ id, data }: NodeProps<DialogueNode>) {
   const { t, fontClass, serifFontClass } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
@@ -274,9 +275,9 @@ const nodeTypes: NodeTypes = {
 };
 
 export default function DialogueTreeModal({ isOpen, onClose, characterId, onDialogueEdit }: DialogueTreeModalProps) {
-  const { t, fontClass, serifFontClass } = useLanguage();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const { t, language, fontClass, serifFontClass } = useLanguage();
+  const [nodes, setNodes, onNodesChange] = useNodesState<DialogueNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedNode, setSelectedNode] = useState<DialogueNode | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editContent, setEditContent] = useState("");
@@ -284,7 +285,7 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isJumpingToNode, setIsJumpingToNode] = useState(false);
   const flowRef = useRef(null);
-  const nodesRef = useRef<Node[]>([]);
+  const nodesRef = useRef<DialogueNode[]>([]);
   const modalRef = useRef<HTMLDivElement>(null);
   const editModalRef = useRef<HTMLDivElement>(null);
   
@@ -294,14 +295,14 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
     animated: true,
   }), []);
 
-  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
+  const reactFlowInstanceRef = useRef<ReactFlowInstance<DialogueNode, Edge> | null>(null);
   
-  const handleFlowInit = useCallback((instance: ReactFlowInstance) => {
+  const handleFlowInit = useCallback((instance: ReactFlowInstance<DialogueNode, Edge>) => {
     reactFlowInstanceRef.current = instance;
     adjustViewport(instance);
   }, []);
   
-  const adjustViewport = useCallback((instance: ReactFlowInstance) => {
+  const adjustViewport = useCallback((instance: ReactFlowInstance<DialogueNode, Edge>) => {
     instance.fitView({ padding: 0.2 });
     
     const nodeCount = nodesRef.current.length;
@@ -620,22 +621,17 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
       setIsSaving(true);
       try {
         const activeConfig = getActiveApiConfig();
-        const language = localStorage.getItem("language") || "zh";
 
-        if (!activeConfig?.model || !activeConfig?.apiKey) {
-          throw new Error("Missing active API configuration");
+        if (!activeConfig?.model) {
+          throw new Error("Missing active model");
         }
         
         const response = await editDialaogueNodeContent({
           characterId: characterId,
           nodeId: selectedNode.id,
           assistantResponse: editContent,
-          model_name: activeConfig.model,
-          api_key: activeConfig.apiKey,
-          base_url: activeConfig.baseUrl,
-          llm_type: activeConfig.type,
+          model_id: activeConfig.model,
           language: language,
-          reasoning_effort: activeConfig.reasoningEffortEnabled ? activeConfig.reasoningEffort : undefined,
         });
         
         if (!response.success) {

@@ -1,16 +1,44 @@
 import { PresetPrompt } from "@/lib/models/preset-model";
 import { adaptText } from "@/lib/adapter/tagReplacer";
-import { MULTI_MODE_PROMPT, MULTI_MODE_CHAIN_OF_THOUGHT, OUTPUT_STRUCTURE_SOFT_GUIDE } from "@/lib/prompts/preset-prompts";
+import {
+  BASE_NARRATIVE_SYSTEM_PROMPT,
+  NARRATIVE_CONTINUATION_GUIDE,
+  OUTPUT_CONTRACT,
+  RESPONSE_LANGUAGE_POLICY,
+} from "@/lib/prompts/preset-prompts";
+import type { Language } from "@/lib/i18n/languages";
+
+interface PresetContextData {
+  protagonistName?: string;
+  charName?: string;
+  number?: number;
+  description?: string;
+  personality?: string;
+  scenario?: string;
+  mesExamples?: string;
+  creatorNotes?: string;
+  systemPrompt?: string;
+  postHistoryInstructions?: string;
+}
+
+export function responseLengthPreference(language: Language, target?: number): string {
+  void language;
+  const normalizedTarget = typeof target === "number" && Number.isFinite(target)
+    ? Math.max(1, Math.round(target))
+    : null;
+  const length = normalizedTarget === null
+    ? "a natural, moderate length"
+    : `approximately ${normalizedTarget} characters`;
+  return `This is a high-priority soft length preference: keep the main narrative body inside output near ${length}, normally within roughly 0.75x to 1.5x of the target. Do not substantially exceed it unless needed to finish an indivisible sentence, an ongoing exchange, or required output structure. This is not an API truncation limit: end naturally, never cut off a sentence or story beat, and do not pad the response to reach the target. Count only the main narrative body, excluding XML tags, next_prompts, and events.`;
+}
 
 export class PresetAssembler {
   static assemblePrompts(
     prompts: PresetPrompt[],
-    language: "zh" | "en" = "zh",
-    fastModel:boolean,
-    contextData: { username?: string; charName?: string; number?: number } = {},
+    language: Language = "zh",
+    contextData: PresetContextData = {},
   ): { systemMessage: string; userMessage: string } {
-    if (prompts.length === 0 || fastModel) {
-      console.group("PresetAssembler", prompts.length, fastModel);
+    if (prompts.length === 0) {
       return PresetAssembler._getDefaultFramework(language, contextData);
     }
 
@@ -84,6 +112,9 @@ export class PresetAssembler {
       } else if (id === "worldInfoBefore" || id === "worldInfoAfter") {
         finalSystemMessageParts.push(`{{${id}}}`);
       }
+      if (id === "main") {
+        finalSystemMessageParts.push(RESPONSE_LANGUAGE_POLICY);
+      }
       finalSystemMessageParts.push(`</${id}>`);
     }
 
@@ -114,48 +145,8 @@ export class PresetAssembler {
       finalUserMessageParts.push("{{userInput}}");
       finalUserMessageParts.push("</userInput>");
     }
-    finalUserMessageParts.push(OUTPUT_STRUCTURE_SOFT_GUIDE);
-    finalUserMessageParts.push("");
     finalUserMessageParts.push("<outputFormat>");
-    if (language === "zh") {
-      finalUserMessageParts.push("【输出格式要求】");
-      finalUserMessageParts.push(`请严格按照以下格式输出回复，输出${contextData.number}个字符的回复内容，并使用中文输出。`);
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<output>");
-      finalUserMessageParts.push("在这里输出你的主要回应内容，包括角色的对话、行动、心理描述等。");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<next_prompts>");
-      finalUserMessageParts.push("- [根据玩家当前状态做出重大决断，引发主线推进或支线开启，第三方人称叙事，不超过15字]");
-      finalUserMessageParts.push("- [引导进入未知或新领域，引发关键物品/人物/真相出现，第三方人称叙事，不超过15字]");
-      finalUserMessageParts.push("- [表达重要情感抉择或人际关系变化，影响未来走向，第三方人称叙事，不超过15字]");
-      finalUserMessageParts.push("</next_prompts>");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<events>");
-      finalUserMessageParts.push("[核心事件1，简洁陈述] ——> [核心事件2，简洁陈述] ——> [核心事件3，简洁陈述] ——> [核心事件4，简洁陈述] ——> [...]");
-      finalUserMessageParts.push("</events>");
-      finalUserMessageParts.push("</output>");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("注意：必须严格遵循上述XML标签格式，所有内容都必须包含在output标签内。");
-    } else {
-      finalUserMessageParts.push("【Output Format Requirements】");
-      finalUserMessageParts.push(`Please strictly follow the format below for your response, and output a response of ${contextData.number} characters, and output in English.`);
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<output>");
-      finalUserMessageParts.push("Output your main response content here, including character dialogue, actions, psychological descriptions, etc.");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<next_prompts>");
-      finalUserMessageParts.push("- [Make a major decision based on the player\'s current state, triggering main plot advancement or side-quest initiation, third-person narrative, within 15 words]");
-      finalUserMessageParts.push("- [Guide into unknown or new areas, triggering the appearance of key items/characters/truths, third-person narrative, within 15 words]");
-      finalUserMessageParts.push("- [Express important emotional choices or changes in interpersonal relationships, influencing future direction, third-person narrative, within 15 words]");
-      finalUserMessageParts.push("</next_prompts>");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<events>");
-      finalUserMessageParts.push("[Core Event 1, concise statement] --> [Core Event 2, concise statement] --> [Core Event 3, concise statement] --> [Core Event 4, concise statement] --> [...]");
-      finalUserMessageParts.push("</events>");
-      finalUserMessageParts.push("</output>");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("Note: You must strictly adhere to the XML tag format above. All content must be contained within the output tag.");
-    }
+    finalUserMessageParts.push(OUTPUT_CONTRACT);
     finalUserMessageParts.push("</outputFormat>");
 
     return {
@@ -164,7 +155,7 @@ export class PresetAssembler {
     };
   }
 
-  private static _getDefaultFramework(language: "zh" | "en" = "zh", contextData: { username?: string; charName?: string; number?: number } = {}): { systemMessage: string; userMessage: string } {
+  private static _getDefaultFramework(language: Language = "zh", contextData: PresetContextData = {}): { systemMessage: string; userMessage: string } {
     const orderedSystemIdentifiers = [
       "main",
       "worldInfoBefore",
@@ -187,7 +178,8 @@ export class PresetAssembler {
       finalSystemMessageParts.push(`<${id}>`);
 
       if (id === "main") {
-        finalSystemMessageParts.push(MULTI_MODE_PROMPT);
+        finalSystemMessageParts.push(BASE_NARRATIVE_SYSTEM_PROMPT);
+        finalSystemMessageParts.push(RESPONSE_LANGUAGE_POLICY);
       } else if (id === "worldInfoBefore" || id === "worldInfoAfter") {
         finalSystemMessageParts.push(`{{${id}}}`);
       }
@@ -202,9 +194,7 @@ export class PresetAssembler {
       finalUserMessageParts.push(`<${id}>`);
       
       if (id === "enhanceDefinitions") {
-        finalUserMessageParts.push(MULTI_MODE_CHAIN_OF_THOUGHT);
-        finalUserMessageParts.push("\n\n");
-        finalUserMessageParts.push(OUTPUT_STRUCTURE_SOFT_GUIDE);
+        finalUserMessageParts.push(NARRATIVE_CONTINUATION_GUIDE);
       } else if (id === "chatHistory" || id === "userInput") {
         finalUserMessageParts.push(`{{${id}}}`);
         if (id === "userInput") {
@@ -222,36 +212,7 @@ export class PresetAssembler {
   
     finalUserMessageParts.push("");
     finalUserMessageParts.push("<outputFormat>");
-    if (language === "zh") {
-      finalUserMessageParts.push("【输出格式要求】");
-      finalUserMessageParts.push(`请严格按照以下格式输出回复，输出${contextData.number}个字符的回复内容，并使用中文输出。`);
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<output>");
-      finalUserMessageParts.push("在这里输出你的主要回应内容，包括角色的对话、行动、心理描述等。");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("</output>");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("注意：必须严格遵循上述XML标签格式，所有内容都必须包含在output标签内。");
-    } else {
-      finalUserMessageParts.push("【Output Format Requirements】");
-      finalUserMessageParts.push(`Please strictly follow the format below for your response, and output a response of ${contextData.number} characters, and output in English.`);
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<output>");
-      finalUserMessageParts.push("Output your main response content here, including character dialogue, actions, psychological descriptions, etc.");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<next_prompts>");
-      finalUserMessageParts.push("- [Make a major decision based on the player\'s current state, triggering main plot advancement or side-quest initiation, third-person narrative, within 15 words]");
-      finalUserMessageParts.push("- [Guide into unknown or new areas, triggering the appearance of key items/characters/truths, third-person narrative, within 15 words]");
-      finalUserMessageParts.push("- [Express important emotional choices or changes in interpersonal relationships, influencing future direction, third-person narrative, within 15 words]");
-      finalUserMessageParts.push("</next_prompts>");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("<events>");
-      finalUserMessageParts.push("[Core Event 1, concise statement] --> [Core Event 2, concise statement] --> [Core Event 3, concise statement] --> [Core Event 4, concise statement] --> [...]");
-      finalUserMessageParts.push("</events>");
-      finalUserMessageParts.push("</output>");
-      finalUserMessageParts.push("");
-      finalUserMessageParts.push("Note: You must strictly adhere to the XML tag format above. All content must be contained within the output tag.");
-    }
+    finalUserMessageParts.push(OUTPUT_CONTRACT);
     finalUserMessageParts.push("</outputFormat>");
     return {
       systemMessage: finalSystemMessageParts.filter(Boolean).join("\n\n"),
@@ -261,8 +222,8 @@ export class PresetAssembler {
 
   private static _formatPromptContent(
     prompt: PresetPrompt,
-    language: "zh" | "en",
-    contextData: { username?: string; charName?: string; number?: number },
+    language: Language,
+    contextData: PresetContextData,
   ): string {
     let contentToAppend = "";
 
@@ -276,8 +237,9 @@ export class PresetAssembler {
       let adaptedPromptContent = adaptText(
         prompt.content,
         language,
-        contextData.username,
+        contextData.protagonistName,
         contextData.charName,
+        contextData,
       );
       if (prompt.name) {
         adaptedPromptContent = `【${prompt.name}】\n${adaptedPromptContent}`;

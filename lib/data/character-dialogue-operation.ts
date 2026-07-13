@@ -6,8 +6,11 @@ import { ParsedResponse } from "@/lib/models/parsed-response";
 export class LocalCharacterDialogueOperations {
   static async createDialogueTree(characterId: string): Promise<DialogueTree> {
     const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
-    
-    const filteredDialogues = dialogues.filter((d: any) => d.character_id !== characterId);
+    for (let index = dialogues.length - 1; index >= 0; index--) {
+      if (dialogues[index].character_id === characterId) {
+        dialogues.splice(index, 1);
+      }
+    }
     
     const dialogueTree = new DialogueTree(
       characterId,
@@ -16,8 +19,8 @@ export class LocalCharacterDialogueOperations {
       "root",
     );
     
-    filteredDialogues.push(dialogueTree); 
-    await writeData(CHARACTER_DIALOGUES_FILE, filteredDialogues);
+    dialogues.push(dialogueTree);
+    await writeData(CHARACTER_DIALOGUES_FILE, dialogues);
 
     await this.addNodeToDialogueTree(characterId, "", "", "", "", undefined, "root");
     return dialogueTree;
@@ -56,33 +59,47 @@ export class LocalCharacterDialogueOperations {
     parsedContent?: ParsedResponse,
     nodeId?: string,
   ): Promise<string> {
-    const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
-    const index = dialogues.findIndex((d: any) => d.id === dialogueId);
-    
     if (!nodeId) {
       nodeId = uuidv4();
     }
-    
-    const newNode = new DialogueNode(
-      nodeId,
-      parentNodeId,
-      userInput,
-      assistantResponse,
-      fullResponse,
-      parsedContent,
-    );
-    
-    if (!dialogues[index].nodes) {
-      dialogues[index].nodes = [];
+
+    // A completed backend run may be observed by two tabs. Treat the node id
+    // as the idempotency key and retry once against the newest document when
+    // another tab wins the optimistic-revision write.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
+      const index = dialogues.findIndex((d: any) => d.id === dialogueId);
+      if (index === -1) {
+        throw new Error(`Dialogue tree not found: ${dialogueId}`);
+      }
+      const nodes = Array.isArray(dialogues[index].nodes) ? dialogues[index].nodes : [];
+      if (nodes.some((node: any) => node.node_id === nodeId)) {
+        return nodeId;
+      }
+
+      nodes.push(new DialogueNode(
+        nodeId,
+        parentNodeId,
+        userInput,
+        assistantResponse,
+        fullResponse,
+        parsedContent,
+      ));
+      dialogues[index].nodes = nodes;
+      dialogues[index].current_node_id = nodeId;
+      dialogues[index].updated_at = new Date().toISOString();
+
+      try {
+        await writeData(CHARACTER_DIALOGUES_FILE, dialogues);
+        return nodeId;
+      } catch (error) {
+        if (attempt === 2) {
+          throw error;
+        }
+      }
     }
-    
-    dialogues[index].nodes.push(newNode);
-    dialogues[index].current_node_id = nodeId;
-    dialogues[index].updated_at = new Date().toISOString();
-    
-    await writeData(CHARACTER_DIALOGUES_FILE, dialogues);
-    
-    return nodeId;
+
+    throw new Error(`Unable to persist dialogue node: ${nodeId}`);
   }
 
   static async updateDialogueTree(dialogueId: string, updatedDialogue: DialogueTree): Promise<boolean> {
@@ -107,49 +124,50 @@ export class LocalCharacterDialogueOperations {
     nodeId: string, 
     updates: Partial<DialogueNode>,
   ): Promise<DialogueTree | null> {
-    const dialogueTree = await this.getDialogueTreeById(dialogueId);
-    
-    if (!dialogueTree) {
-      return null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
+      const dialogueIndex = dialogues.findIndex((dialogue: any) => dialogue.id === dialogueId);
+      if (dialogueIndex === -1) return null;
+
+      const nodes = Array.isArray(dialogues[dialogueIndex].nodes)
+        ? dialogues[dialogueIndex].nodes
+        : [];
+      const nodeIndex = nodes.findIndex((node: any) => node.node_id === nodeId);
+      if (nodeIndex === -1) return null;
+
+      nodes[nodeIndex] = { ...nodes[nodeIndex], ...updates };
+      dialogues[dialogueIndex].nodes = nodes;
+      dialogues[dialogueIndex].updated_at = new Date().toISOString();
+      try {
+        await writeData(CHARACTER_DIALOGUES_FILE, dialogues);
+        return this.convertToDialogueTree(dialogues[dialogueIndex]);
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
     }
-    
-    const nodeIndex = dialogueTree.nodes.findIndex(node => node.node_id === nodeId);
-    
-    if (nodeIndex === -1) {
-      return null;
-    }
-    
-    dialogueTree.nodes[nodeIndex] = {
-      ...dialogueTree.nodes[nodeIndex],
-      ...updates,
-    };
-    
-    dialogueTree.updated_at = new Date().toISOString();
-    
-    await this.updateDialogueTree(dialogueId, dialogueTree);
-    
-    return dialogueTree;
+    return null;
   }
   
   static async switchBranch(dialogueId: string, nodeId: string): Promise<DialogueTree | null> {
-    const dialogueTree = await this.getDialogueTreeById(dialogueId);
-    
-    if (!dialogueTree) {
-      return null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
+      const dialogueIndex = dialogues.findIndex((dialogue: any) => dialogue.id === dialogueId);
+      if (dialogueIndex === -1) return null;
+
+      const dialogue = dialogues[dialogueIndex];
+      const nodes = Array.isArray(dialogue.nodes) ? dialogue.nodes : [];
+      if (!nodes.some((node: any) => node.node_id === nodeId)) return null;
+
+      dialogue.current_node_id = nodeId;
+      dialogue.updated_at = new Date().toISOString();
+      try {
+        await writeData(CHARACTER_DIALOGUES_FILE, dialogues);
+        return this.convertToDialogueTree(dialogue);
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
     }
-    
-    const node = dialogueTree.nodes.find(n => n.node_id === nodeId);
-    
-    if (!node) {
-      return null;
-    }
-    
-    dialogueTree.current_node_id = nodeId;
-    dialogueTree.updated_at = new Date().toISOString();
-    
-    await this.updateDialogueTree(dialogueId, dialogueTree);
-    
-    return dialogueTree;
+    return null;
   }
   
   static async clearDialogueHistory(dialogueId: string): Promise<DialogueTree | null> {
@@ -170,15 +188,14 @@ export class LocalCharacterDialogueOperations {
 
   static async deleteDialogueTree(dialogueId: string): Promise<boolean> {
     const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
-    const initialLength = dialogues.length;
-    
-    const filteredDialogues = dialogues.filter((d: any) => d.id !== dialogueId);
-    
-    if (filteredDialogues.length === initialLength) {
+    const index = dialogues.findIndex((dialogue: any) => dialogue.id === dialogueId);
+
+    if (index === -1) {
       return false;
     }
-    
-    await writeData(CHARACTER_DIALOGUES_FILE, filteredDialogues);
+
+    dialogues.splice(index, 1);
+    await writeData(CHARACTER_DIALOGUES_FILE, dialogues);
     
     return true;
   }
@@ -265,7 +282,7 @@ export class LocalCharacterDialogueOperations {
         node.parent_node_id,
         node.user_input,
         node.assistant_response,
-        node.response_summary,
+        node.full_response ?? node.response_summary ?? node.assistant_response,
         node.parsed_content,
         node.created_at,
       )) || [],

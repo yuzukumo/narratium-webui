@@ -3,35 +3,23 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useLanguage } from "@/app/i18n";
-import { clearUserSession, subscribeToUserSession } from "@/utils/user-session";
+import UserMenu from "@/components/UserMenu";
 import "@/app/styles/fantasy-ui.css";
 
 interface SidebarProps {
   isOpen: boolean;
+  isMobile: boolean;
   toggleSidebar: () => void;
-  openLoginModal: () => void;
 }
 
-export default function Sidebar({ isOpen, toggleSidebar, openLoginModal }: SidebarProps) {
-  const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [username, setUsername] = useState("");
+export default function Sidebar({ isOpen, isMobile, toggleSidebar }: SidebarProps) {
   const [isHomeOpen, setIsHomeOpen] = useState(true);
   const [isGameOpen, setIsGameOpen] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
-  const { t, language, fontClass } = useLanguage();
+  const { t, fontClass } = useLanguage();
   const [animationComplete, setAnimationComplete] = useState(false);
   const [isCreatorOpen, setIsCreatorOpen] = useState(true);
   
-  useEffect(() => {
-    return subscribeToUserSession((session) => {
-      setIsLoggedIn(session.isLoggedIn);
-      setUsername(session.username);
-    });
-  }, []);
-
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => setAnimationComplete(true), 50);
@@ -41,25 +29,9 @@ export default function Sidebar({ isOpen, toggleSidebar, openLoginModal }: Sideb
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    const checkIfMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkIfMobile();
-    window.addEventListener("resize", checkIfMobile);
-
-    return () => window.removeEventListener("resize", checkIfMobile);
-  }, []);
-
   if (isMobile) {
     return null;
   }
-
-  const handleLogout = () => {
-    clearUserSession();
-    router.push("/");
-  };
 
   return (
     <div
@@ -86,7 +58,7 @@ export default function Sidebar({ isOpen, toggleSidebar, openLoginModal }: Sideb
             );
           }}
           className={"flex items-center justify-center text-[#f4e8c1] bg-[#1c1c1c] rounded-lg border border-[#333333] shadow-inner transition-all duration-300 hover:bg-[#252525] hover:border-[#444444] hover:text-amber-400 hover:shadow-[0_0_8px_rgba(251,146,60,0.4)] w-8 h-8"}
-          aria-label={isOpen ? (language === "zh" ? "收起侧边栏" : "Collapse Sidebar") : (language === "zh" ? "展开侧边栏" : "Expand Sidebar")}
+          aria-label={t(isOpen ? "characterChat.collapseSidebar" : "characterChat.expandSidebar")}
         >
           {isOpen ? (
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300">
@@ -310,179 +282,11 @@ export default function Sidebar({ isOpen, toggleSidebar, openLoginModal }: Sideb
           </li>
         </ul>
       </nav>
-      <div className="relative mt-auto pt-4 px-2 mb-3 transition-all duration-300 overflow-hidden group/footer">
+      <div className="relative mt-auto px-2 pb-3 pt-4 transition-all duration-300">
         <div className="absolute top-0 left-0 right-0 h-[0.5px] bg-gradient-to-r from-transparent via-[#f8d36a] to-transparent opacity-70"></div>
         <div className="absolute top-0 left-0 right-0 h-[0.5px] bg-gradient-to-r from-transparent via-[#f8d36a] to-transparent opacity-40 blur-[1px] translate-y-[0.5px]"></div>
         <div className="absolute top-0 left-1/4 right-1/4 h-[0.5px] bg-[#f8d36a] opacity-20 blur-[2px] translate-y-[1px]"></div>
-
-        <div className="absolute top-[-1px] w-8 h-[2px] bg-gradient-to-r from-transparent via-[#ffd76a] to-transparent opacity-0 group-hover/footer:opacity-80 blur-[1px] transition-all duration-500 ease-in-out" 
-          style={{
-            left: "-10%",
-            animation: "moveRight 3s ease-in-out infinite",
-          }}></div>
-
-        <div className="absolute top-0 left-1/4 h-[2px] w-[2px] rounded-full bg-[#ffd76a] opacity-0 group-hover/footer:opacity-90 transition-opacity duration-500 delay-100"></div>
-        <div className="absolute top-0 left-2/4 h-[2px] w-[2px] rounded-full bg-[#ffd76a] opacity-0 group-hover/footer:opacity-90 transition-opacity duration-500 delay-300"></div>
-        <div className="absolute top-0 left-3/4 h-[2px] w-[2px] rounded-full bg-[#ffd76a] opacity-0 group-hover/footer:opacity-90 transition-opacity duration-500 delay-500"></div>
-        
-        <style jsx>{`
-          @keyframes moveRight {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(calc(100vw)); }
-          }
-        `}</style>
-        
-        <div className="mb-2">
-          {!isLoggedIn ? (
-            <button 
-              onClick={openLoginModal}
-              data-tour="login-button"
-              className={`focus:outline-none group relative overflow-hidden rounded-md w-full transition-all duration-300 ${!isOpen ? "p-2 flex justify-center" : "py-1.5 px-2 flex items-center justify-center"} cursor-pointer`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-[#242424]/0 to-[#1a1a1a]/0 opacity-0 group-hover:opacity-80 transition-opacity duration-300"></div>
-              <div className="relative flex items-center justify-center w-full transition-all duration-300 z-10">
-                <div className={`${isOpen ? "w-6 h-6" : "w-8 h-8"} flex items-center justify-center flex-shrink-0 text-[#f8d36a] group-hover:text-[#ffc107] transition-colors duration-300`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width={isOpen ? "14" : "16"} height={isOpen ? "14" : "16"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300 group-hover:scale-110">
-                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                    <polyline points="10 17 15 12 10 7" />
-                    <line x1="15" y1="12" x2="3" y2="12" />
-                  </svg>
-                </div>
-                {isOpen && (
-                  <div className="ml-2 transition-all duration-300 ease-in-out overflow-hidden" style={{ transitionDelay: isOpen ? "50ms" : "0ms", opacity: isOpen ? 1 : 0 }}>
-                    <span className={`magical-text whitespace-nowrap block text-xs font-medium bg-clip-text text-transparent bg-gradient-to-r from-[#f8d36a] to-[#ffc107] ${fontClass}`}>
-                      {isOpen && t("sidebar.nologin").split("").map((char, index) => (
-                        <span 
-                          key={index} 
-                          className="inline-block transition-all duration-300" 
-                          style={{ 
-                            opacity: animationComplete ? 1 : 0,
-                            transform: animationComplete ? "translateY(0)" : "translateY(8px)",
-                            transitionDelay: `${250 + index * 30}ms`,
-                            width: char === " " ? "0.25em" : "auto",
-                          }}
-                        >
-                          {char}
-                        </span>
-                      ))}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="absolute inset-0 w-full h-full bg-[#333] opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
-              <div className="absolute bottom-0 left-0 h-[1px] bg-gradient-to-r from-transparent via-[#f8d36a] to-transparent w-0 group-hover:w-full transition-all duration-500"></div>
-            </button>
-          ) : (
-            <button
-              onClick={handleLogout}
-              className={`focus:outline-none group relative overflow-hidden rounded-md w-full transition-all duration-300 ${!isOpen ? "p-2 flex justify-center" : "py-1.5 px-2 flex items-center justify-center"} cursor-pointer`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-[#242424]/0 to-[#1a1a1a]/0 opacity-0 group-hover:opacity-80 transition-opacity duration-300"></div>
-              <div className="relative flex items-center justify-center w-full transition-all duration-300 z-10">
-                <div className={`${isOpen ? "w-6 h-6" : "w-8 h-8"} flex items-center justify-center flex-shrink-0 text-[#f8d36a] group-hover:text-[#ffc107] transition-colors duration-300 `}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width={isOpen ? "14" : "16"} height={isOpen ? "14" : "16"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300 group-hover:scale-110">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                </div>
-                {isOpen && (
-                  <div className="ml-2 transition-all duration-300 ease-in-out overflow-hidden" style={{ transitionDelay: isOpen ? "50ms" : "0ms", opacity: isOpen ? 1 : 0 }}>
-                    <div>
-                      <span className={`magical-text whitespace-nowrap block text-xs font-medium bg-clip-text text-transparent bg-gradient-to-r from-[#f8d36a] to-[#ffc107] ${fontClass}`}>
-                        {isOpen && username.split("").map((char, index) => (
-                          <span 
-                            key={index} 
-                            className="inline-block transition-all duration-300" 
-                            style={{ 
-                              opacity: animationComplete ? 1 : 0,
-                              transform: animationComplete ? "translateY(0)" : "translateY(8px)",
-                              transitionDelay: `${250 + index * 30}ms`,
-                              width: char === " " ? "0.25em" : "auto",
-                            }}
-                          >
-                            {char}
-                          </span>
-                        ))}
-                      </span>
-                    </div>
-                    <div className="mt-1">
-                      <span className={`magical-text whitespace-nowrap block text-xs font-medium bg-clip-text text-transparent bg-gradient-to-r from-[#f8d36a] to-[#ffc107] ${fontClass}`}>
-                        {isOpen && t("sidebar.logout").split("").map((char, index) => (
-                          <span 
-                            key={index} 
-                            className="inline-block transition-all duration-300" 
-                            style={{ 
-                              opacity: animationComplete ? 1 : 0,
-                              transform: animationComplete ? "translateY(0)" : "translateY(8px)",
-                              transitionDelay: `${250 + index * 30}ms`,
-                              width: char === " " ? "0.25em" : "auto",
-                            }}
-                          >
-                            {char}
-                          </span>
-                        ))}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="absolute inset-0 w-full h-full bg-[#333] opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
-              <div className="absolute bottom-0 left-0 h-[1px] bg-gradient-to-r from-transparent via-[#f8d36a] to-transparent w-0 group-hover:w-full transition-all duration-500"></div>
-            </button>
-          )}
-        </div>
-
-        <div>
-          <a 
-            href="https://github.com/yuzukumo/narratium-webui"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`focus:outline-none group relative overflow-hidden rounded-md w-full transition-all duration-300 ${!isOpen ? "p-2 flex justify-center" : "py-1.5 px-2 flex items-center justify-center"}`}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-[#242424]/0 to-[#1a1a1a]/0 opacity-0 group-hover:opacity-80 transition-opacity duration-300"></div>
-            <div className="relative flex items-center justify-center transition-all duration-300 z-10">
-              <div className={`${isOpen ? "w-6 h-6" : "w-8 h-8"} flex items-center justify-center flex-shrink-0 text-[#f8d36a] group-hover:text-[#ffc107] transition-colors duration-300`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width={isOpen ? "14" : "16"} height={isOpen ? "14" : "16"} viewBox="0 0 24 24" fill="currentColor" className="transition-transform duration-300 group-hover:scale-110">
-                  <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 
-                  3.438 9.8 8.205 11.387.6.113.82-.258.82-.577 
-                  0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.416-4.042-1.416 
-                  -.546-1.387-1.333-1.757-1.333-1.757-1.09-.745.084-.729.084-.729 
-                  1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.304 
-                  3.495.997.108-.776.418-1.305.76-1.605-2.665-.3-5.466-1.334-5.466-5.93 
-                  0-1.31.468-2.38 1.236-3.22-.124-.303-.536-1.523.117-3.176 
-                  0 0 1.008-.322 3.3 1.23a11.52 11.52 0 013.003-.404c1.018.005 2.045.138 3.003.404 
-                  2.29-1.552 3.295-1.23 3.295-1.23.655 1.653.243 2.873.12 3.176 
-                  .77.84 1.234 1.91 1.234 3.22 0 4.61-2.807 5.625-5.48 5.92.43.37.823 1.096.823 2.21 
-                  0 1.595-.015 2.88-.015 3.27 0 .32.216.694.825.576 
-                  C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-                </svg>
-              </div>
-              {isOpen && (
-                <div className="ml-2 transition-all duration-300 ease-in-out overflow-hidden" style={{ transitionDelay: isOpen ? "50ms" : "0ms", opacity: isOpen ? 1 : 0 }}>
-                  <span className={`magical-text whitespace-nowrap block text-xs font-medium bg-clip-text text-transparent bg-gradient-to-r from-[#f8d36a] to-[#ffc107] ${fontClass}`}>
-                    {isOpen && "Star us on GitHub".split("").map((char, index) => (
-                      <span 
-                        key={index} 
-                        className="inline-block transition-all duration-300" 
-                        style={{ 
-                          opacity: animationComplete ? 1 : 0,
-                          transform: animationComplete ? "translateY(0)" : "translateY(8px)",
-                          transitionDelay: `${250 + index * 30}ms`,
-                          width: char === " " ? "0.25em" : "auto",
-                        }}
-                      >
-                        {char}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="absolute inset-0 w-full h-full bg-[#333] opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
-            <div className="absolute bottom-0 left-0 h-[1px] bg-gradient-to-r from-transparent via-[#f8d36a] to-transparent w-0 group-hover:w-full transition-all duration-500"></div>
-          </a>
-        </div>
+        <UserMenu compact={!isOpen} placement="top" />
       </div>
     </div>
   );

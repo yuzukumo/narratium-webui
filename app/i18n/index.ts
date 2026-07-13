@@ -1,13 +1,49 @@
 import { createContext, useContext } from "react";
+import en from "./locales/en.json";
+import zh from "./locales/zh.json";
+import de from "./locales/de.json";
+import es from "./locales/es.json";
+import fr from "./locales/fr.json";
+import ja from "./locales/ja.json";
+import zhTW from "./locales/zh-TW.json";
+import {
+  DEFAULT_LANGUAGE,
+  LANGUAGES,
+  LANGUAGE_NATIVE_NAMES,
+  Language,
+  LanguagePreference,
+  isLanguage,
+  languageFromLocales,
+} from "@/lib/i18n/languages";
 
-export const LANGUAGES = ["zh", "en"] as const;
-export type Language = typeof LANGUAGES[number];
+export {
+  DEFAULT_LANGUAGE,
+  LANGUAGES,
+  LANGUAGE_NATIVE_NAMES,
+  isLanguage,
+  languageFromLocales,
+};
+export type { Language, LanguagePreference };
 
-export const DEFAULT_LANGUAGE: Language = "zh";
+export const LANGUAGE_PREFERENCE_KEY = "language";
+export const PREFERENCES_CHANGED_EVENT = "narratium:preferences-changed";
+
+type TranslationTree = { [key: string]: string | TranslationTree };
+
+const TRANSLATIONS: Record<Language, TranslationTree> = {
+  zh,
+  "zh-TW": zhTW,
+  en,
+  fr,
+  es,
+  de,
+  ja,
+};
 
 type LanguageContextType = {
   language: Language;
-  setLanguage: (language: Language) => void;
+  languagePreference: LanguagePreference;
+  setLanguagePreference: (preference: LanguagePreference) => void;
   t: (key: string) => string;
   fontClass: string;
   titleFontClass: string;
@@ -25,37 +61,26 @@ export const useLanguage = () => {
 };
 
 export const getTranslation = (language: Language, key: string): string => {
-  try {
-    const translations = require(`./locales/${language}.json`);
-    
-    const keys = key.split(".");
-    let result = translations;
-    
-    for (const k of keys) {
-      if (result[k] === undefined) {
-        return key;
+  const resolve = (tree: TranslationTree): string | undefined => {
+    let result: string | TranslationTree = tree;
+    for (const part of key.split(".")) {
+      if (typeof result === "string" || result[part] === undefined) {
+        return undefined;
       }
-      result = result[k];
+      result = result[part];
     }
-    
-    return result;
-  } catch (error) {
-    return key;
-  }
+    return typeof result === "string" ? result : undefined;
+  };
+
+  return resolve(TRANSLATIONS[language]) ?? resolve(TRANSLATIONS.en) ?? key;
 };
 
 export const getClientLanguage = (): Language => {
-  if (typeof window !== "undefined") {
-    const savedLanguage = localStorage.getItem("language") as Language;
-    if (savedLanguage && LANGUAGES.includes(savedLanguage)) {
-      return savedLanguage;
-    }
-    
-    const browserLang = navigator.language.split("-")[0] as Language;
-    if (LANGUAGES.includes(browserLang)) {
-      return browserLang;
-    }
+  if (typeof window === "undefined") {
+    return DEFAULT_LANGUAGE;
   }
-  
-  return DEFAULT_LANGUAGE;
+  const locales = navigator.languages?.length > 0
+    ? navigator.languages
+    : [navigator.language];
+  return languageFromLocales(locales);
 };

@@ -5,8 +5,10 @@ import "./styles/fonts.css";
 import MainLayout from "@/components/MainLayout";
 import { LanguageProvider } from "@/app/i18n/LanguageProvider";
 import { SoundProvider } from "@/contexts/SoundContext";
-import GoogleAnalytics from "@/components/GoogleAnalytics";
-import { Analytics } from "@vercel/analytics/react";
+import { AuthProvider } from "@/contexts/AuthContext";
+import AuthGate from "@/components/AuthGate";
+import { ModelProvider } from "@/contexts/ModelContext";
+import AppToaster from "@/components/AppToaster";
 
 // Define viewport configuration
 export const viewport: Viewport = {
@@ -16,32 +18,26 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:5000"),
-  title: "Narratium - Interactive Storytelling Platform",
-  description: "Narratium is an innovative interactive storytelling platform that brings your stories to life. Create, share, and experience unique narratives in a fantasy-themed environment.",
-  keywords: "interactive storytelling, narrative platform, fantasy stories, creative writing, story creation",
-  authors: [{ name: "Narratium Team" }],
+  title: "Narratium",
+  description: "A self-hosted AI character roleplay and story workspace.",
+  applicationName: "Narratium",
+  keywords: ["AI character chat", "interactive storytelling", "self-hosted", "story workspace"],
+  authors: [{
+    name: "Narratium contributors",
+    url: "https://github.com/yuzukumo/narratium-webui",
+  }],
   openGraph: {
-    title: "Narratium - Interactive Storytelling Platform",
-    description: "Create and experience unique interactive stories in a fantasy-themed environment",
+    title: "Narratium",
+    description: "A self-hosted AI character roleplay and story workspace.",
     type: "website",
     locale: "en_US",
     alternateLocale: "zh_CN",
     siteName: "Narratium",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Narratium - Interactive Storytelling Platform",
-      },
-    ],
   },
   twitter: {
-    card: "summary_large_image",
-    title: "Narratium - Interactive Storytelling Platform",
-    description: "Create and experience unique interactive stories in a fantasy-themed environment",
-    images: ["/og-image.png"],
+    card: "summary",
+    title: "Narratium",
+    description: "A self-hosted AI character roleplay and story workspace.",
   },
   robots: {
     index: true,
@@ -79,13 +75,18 @@ export default function RootLayout({
   return (
     <html lang="zh" className="h-full">
       <body className="h-full bg-[#171717] text-white">
-        <GoogleAnalytics />
-        <SoundProvider>
-          <LanguageProvider>
-            <MainLayout>{children}</MainLayout>
-          </LanguageProvider>
-        </SoundProvider>
-        <Analytics />
+        <LanguageProvider>
+          <AuthProvider>
+            <AuthGate>
+              <SoundProvider>
+                <ModelProvider>
+                  <AppToaster />
+                  <MainLayout>{children}</MainLayout>
+                </ModelProvider>
+              </SoundProvider>
+            </AuthGate>
+          </AuthProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

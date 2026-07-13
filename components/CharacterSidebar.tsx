@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import toast from "react-hot-toast";
 import { useLanguage } from "@/app/i18n";
 import Link from "next/link";
 import DialogueTreeModal from "@/components/DialogueTreeModal";
@@ -7,7 +8,6 @@ import { CharacterAvatarBackground } from "@/components/CharacterAvatarBackgroun
 import AdvancedSettingsEditor from "@/components/AdvancedSettingsEditor";
 import {
   DEFAULT_RESPONSE_LENGTH,
-  MIN_RESPONSE_LENGTH,
   getStoredResponseLength,
   persistResponseLength,
 } from "@/utils/api-config";
@@ -33,13 +33,23 @@ const CharacterSidebar: React.FC<CharacterSidebarProps> = ({
   onDialogueEdit,
   onViewSwitch,
 }) => {
-  const { t, fontClass, serifFontClass, language } = useLanguage();
+  const { t, fontClass, serifFontClass } = useLanguage();
   const [responseLengthInput, setResponseLengthInput] = useState<string>(DEFAULT_RESPONSE_LENGTH.toString());
+  const responseLengthSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedResponseLengthRef = useRef<number | null>(null);
   const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setResponseLengthInput(getStoredResponseLength().toString());
+      const stored = getStoredResponseLength();
+      lastSavedResponseLengthRef.current = stored;
+      setResponseLengthInput(stored.toString());
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (responseLengthSaveTimerRef.current) {
+      clearTimeout(responseLengthSaveTimerRef.current);
     }
   }, []);
 
@@ -53,11 +63,33 @@ const CharacterSidebar: React.FC<CharacterSidebarProps> = ({
     }
 
     setResponseLengthInput(nextValue);
+    if (responseLengthSaveTimerRef.current) {
+      clearTimeout(responseLengthSaveTimerRef.current);
+      responseLengthSaveTimerRef.current = null;
+    }
+    if (!nextValue) return;
+    responseLengthSaveTimerRef.current = setTimeout(() => {
+      const normalized = persistResponseLength(nextValue);
+      setResponseLengthInput(normalized.toString());
+      if (lastSavedResponseLengthRef.current !== normalized) {
+        lastSavedResponseLengthRef.current = normalized;
+        toast.success(t("notifications.responseLengthSaved"), { id: "response-length-saved" });
+      }
+      responseLengthSaveTimerRef.current = null;
+    }, 600);
   };
 
   const handleResponseLengthBlur = () => {
+    if (responseLengthSaveTimerRef.current) {
+      clearTimeout(responseLengthSaveTimerRef.current);
+      responseLengthSaveTimerRef.current = null;
+    }
     const normalized = persistResponseLength(responseLengthInput || DEFAULT_RESPONSE_LENGTH);
     setResponseLengthInput(normalized.toString());
+    if (lastSavedResponseLengthRef.current !== normalized) {
+      lastSavedResponseLengthRef.current = normalized;
+      toast.success(t("notifications.responseLengthSaved"), { id: "response-length-saved" });
+    }
   };
   
   const handleOpenPromptEditor = () => {
@@ -363,9 +395,8 @@ const CharacterSidebar: React.FC<CharacterSidebarProps> = ({
                 className="w-full bg-[#1c1c1c] border border-[#534741] rounded-md py-2 px-3 text-sm text-[#f4e8c1] focus:outline-none focus:border-[#d1a35c] transition-colors"
               />
               <div className={`text-xs text-[#9ca3af] ${fontClass}`}>
-                {language === "zh"
-                  ? `最低 ${MIN_RESPONSE_LENGTH}，默认 ${DEFAULT_RESPONSE_LENGTH}，不设上限`
-                  : `Minimum ${MIN_RESPONSE_LENGTH}, default ${DEFAULT_RESPONSE_LENGTH}, no upper limit`}
+                {t("characterChat.responseLengthHint")
+                  .replace("{{default}}", String(DEFAULT_RESPONSE_LENGTH))}
               </div>
             </div>
           ) : null}

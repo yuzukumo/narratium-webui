@@ -1,9 +1,18 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
-import { DEFAULT_LANGUAGE, Language, LANGUAGES, LanguageContext, getTranslation, getClientLanguage } from "./index";
+import { ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  DEFAULT_LANGUAGE,
+  LANGUAGE_PREFERENCE_KEY,
+  Language,
+  LanguageContext,
+  LanguagePreference,
+  PREFERENCES_CHANGED_EVENT,
+  getTranslation,
+  getClientLanguage,
+  isLanguage,
+} from "./index";
 import { getLanguageFont, getLanguageTitleFont, getLanguageSerifFont } from "./fonts";
-import LoadingTransition from "@/components/LoadingTransition";
 
 interface LanguageProviderProps {
   children: ReactNode;
@@ -11,75 +20,82 @@ interface LanguageProviderProps {
 
 export function LanguageProvider({ children }: LanguageProviderProps) {
   const [language, setLanguageState] = useState<Language>(DEFAULT_LANGUAGE);
+  const [languagePreference, setLanguagePreferenceState] = useState<LanguagePreference>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [showTransition, setShowTransition] = useState(false);
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
-
   const [fontClass, setFontClass] = useState(getLanguageFont(DEFAULT_LANGUAGE));
   const [titleFontClass, setTitleFontClass] = useState(getLanguageTitleFont(DEFAULT_LANGUAGE));
   const [serifFontClass, setSerifFontClass] = useState(getLanguageSerifFont(DEFAULT_LANGUAGE));
 
+  const applyLanguage = useCallback((nextLanguage: Language) => {
+    setLanguageState(nextLanguage);
+    setFontClass(getLanguageFont(nextLanguage));
+    setTitleFontClass(getLanguageTitleFont(nextLanguage));
+    setSerifFontClass(getLanguageSerifFont(nextLanguage));
+    document.documentElement.lang = nextLanguage;
+  }, []);
+
+  const synchronizePreference = useCallback(() => {
+    const storedPreference = window.localStorage.getItem(LANGUAGE_PREFERENCE_KEY);
+    const nextPreference = isLanguage(storedPreference) ? storedPreference : null;
+    setLanguagePreferenceState(nextPreference);
+    applyLanguage(nextPreference ?? getClientLanguage());
+  }, [applyLanguage]);
+
   useEffect(() => {
-    const clientLanguage = getClientLanguage();
-    setLanguageState(clientLanguage);
+    const synchronizeBrowserLanguage = () => {
+      if (!isLanguage(window.localStorage.getItem(LANGUAGE_PREFERENCE_KEY))) {
+        applyLanguage(getClientLanguage());
+      }
+    };
+    const synchronizeStorage = (event: StorageEvent) => {
+      if (event.storageArea === window.localStorage && (
+        event.key === null || event.key === LANGUAGE_PREFERENCE_KEY
+      )) {
+        synchronizePreference();
+      }
+    };
 
-    setFontClass(getLanguageFont(clientLanguage));
-    setTitleFontClass(getLanguageTitleFont(clientLanguage));
-    setSerifFontClass(getLanguageSerifFont(clientLanguage));
-
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("lang", clientLanguage);
-    }
-    
-    if (isFirstLoad) {
-      setShowTransition(true);
-      setTimeout(() => {
-        setShowTransition(false);
-        setIsFirstLoad(false);
-      }, 3000);
-    }
-    
+    synchronizePreference();
     setIsLoaded(true);
-  }, [isFirstLoad]);
 
-  const setLanguage = (newLanguage: Language) => {
-    if (LANGUAGES.includes(newLanguage) && newLanguage !== language) {
-      setShowTransition(true);
+    window.addEventListener("languagechange", synchronizeBrowserLanguage);
+    window.addEventListener("storage", synchronizeStorage);
+    window.addEventListener(PREFERENCES_CHANGED_EVENT, synchronizePreference);
+    return () => {
+      window.removeEventListener("languagechange", synchronizeBrowserLanguage);
+      window.removeEventListener("storage", synchronizeStorage);
+      window.removeEventListener(PREFERENCES_CHANGED_EVENT, synchronizePreference);
+    };
+  }, [applyLanguage, synchronizePreference]);
 
-      setTimeout(() => {
-        setLanguageState(newLanguage);
-        localStorage.setItem("language", newLanguage);
-
-        setFontClass(getLanguageFont(newLanguage));
-        setTitleFontClass(getLanguageTitleFont(newLanguage));
-        setSerifFontClass(getLanguageSerifFont(newLanguage));
-
-        if (typeof document !== "undefined") {
-          document.documentElement.setAttribute("lang", newLanguage);
-        }
-        
-        setTimeout(() => {
-          setShowTransition(false);
-        }, 2000);
-      }, 500);
+  const setLanguagePreference = useCallback((preference: LanguagePreference) => {
+    if (preference === null) {
+      window.localStorage.removeItem(LANGUAGE_PREFERENCE_KEY);
+    } else {
+      window.localStorage.setItem(LANGUAGE_PREFERENCE_KEY, preference);
     }
-  };
+    setLanguagePreferenceState(preference);
+    applyLanguage(preference ?? getClientLanguage());
+  }, [applyLanguage]);
 
-  const t = (key: string) => {
+  const t = useCallback((key: string) => {
     return getTranslation(language, key);
-  };
+  }, [language]);
 
-  if (!isLoaded && typeof window !== "undefined") {
-    return (
-      <LanguageContext.Provider value={{ language, setLanguage, t, fontClass, titleFontClass, serifFontClass }}>
-        {children}
-      </LanguageContext.Provider>
-    );
+  if (!isLoaded) {
+    return <div className="h-full bg-[#1a1816]" aria-hidden="true" />;
   }
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, fontClass, titleFontClass, serifFontClass }}>
-      {showTransition && <LoadingTransition duration={3000} />}
+    <LanguageContext.Provider value={{
+      language,
+      languagePreference,
+      setLanguagePreference,
+      t,
+      fontClass,
+      titleFontClass,
+      serifFontClass,
+    }}>
       {children}
     </LanguageContext.Provider>
   );

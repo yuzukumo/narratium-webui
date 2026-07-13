@@ -1,0 +1,2 @@
+ALTER TABLE usage_logs
+    ADD COLUMN IF NOT EXISTS reasoning_tokens BIGINT NOT NULL DEFAULT 0;

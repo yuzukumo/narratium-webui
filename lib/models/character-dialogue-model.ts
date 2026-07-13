@@ -1,24 +1,25 @@
 import { ParsedResponse } from "@/lib/models/parsed-response";
 import { PromptType } from "@/lib/models/character-prompts-model";
-import { ApiProvider, ReasoningEffort } from "@/utils/api-config";
+import type { Language } from "@/lib/i18n/languages";
 
 export interface DialogueMessage {
   role: "user" | "assistant" | "system" | "sample";
   content: string;
   parsedContent?: ParsedResponse;
-  id: number;
+  id: string | number;
+  nodeId?: string;
+  parentNodeId?: string;
+  alternativeIndex?: number;
+  alternativeCount?: number;
+  alternativeNodeIds?: string[];
+  timestamp?: string;
 }
 
 export interface DialogueOptions {
-  modelName: string;
-  apiKey: string;
-  baseUrl: string;
-  llmType?: ApiProvider;
-  reasoningEffort?: ReasoningEffort;
+  modelId: string;
   temperature?: number;
   maxTokens?: number;
-  streaming?: boolean;
-  language?: "zh" | "en";
+  language?: Language;
   promptType?: PromptType;
   contextWindow?: number;
 }

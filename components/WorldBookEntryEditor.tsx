@@ -11,6 +11,7 @@ interface EditingEntry {
   secondary_keys: string[];
   content: string;
   position: number;
+  outletName: string;
   depth: number;
   enabled: boolean;
   use_regex: boolean;
@@ -215,9 +216,12 @@ export default function WorldBookEntryEditor({
                 >
                   <option value={0}>{t("worldBook.positionOptions.systemPromptStart")}</option>
                   <option value={1}>{t("worldBook.positionOptions.afterSystemPrompt")}</option>
-                  <option value={2}>{t("worldBook.positionOptions.userMessageStart")}</option>
-                  <option value={3}>{t("worldBook.positionOptions.afterResponseMode")}</option>
+                  <option value={2}>{t("worldBook.positionOptions.authorNoteTop")}</option>
+                  <option value={3}>{t("worldBook.positionOptions.authorNoteBottom")}</option>
                   <option value={4}>{t("worldBook.positionOptions.basedOnDepth")}</option>
+                  <option value={5}>{t("worldBook.positionOptions.examplesTop")}</option>
+                  <option value={6}>{t("worldBook.positionOptions.examplesBottom")}</option>
+                  <option value={7}>{t("worldBook.positionOptions.outlet")}</option>
                 </select>
               </div>
         
@@ -235,6 +239,21 @@ export default function WorldBookEntryEditor({
                 />
               </div>
             </div>
+
+            {editingEntry.position === 7 && (
+              <div className="space-y-2">
+                <label className={`block text-sm font-medium text-[#c0a480] ${fontClass}`}>
+                  {t("worldBook.outletName")}
+                </label>
+                <input
+                  type="text"
+                  value={editingEntry.outletName}
+                  onChange={(e) => onEntryChange({ ...editingEntry, outletName: e.target.value })}
+                  className={`w-full bg-[#252220]/80 border border-[#534741]/60 rounded-lg px-3 py-2.5 text-[#eae6db] focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all duration-300 backdrop-blur-sm ${fontClass}`}
+                  placeholder={t("worldBook.outletNamePlaceholder")}
+                />
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-3">
               <label className={`flex items-center space-x-3 cursor-pointer p-3 rounded-lg bg-[#252220]/40 border border-[#534741]/40 hover:bg-[#252220]/60 hover:border-[#534741]/60 transition-all duration-300 group ${fontClass}`}>

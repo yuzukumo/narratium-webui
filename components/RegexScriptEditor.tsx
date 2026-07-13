@@ -24,7 +24,7 @@ export default function RegexScriptEditor({ onClose, characterName, characterId 
   const [scripts, setScripts] = useState<Record<string, RegexScript>>({});
   const [settings, setSettings] = useState<RegexScriptSettings>({
     enabled: true,
-    applyToPrompt: false,
+    applyToPrompt: true,
     applyToResponse: true,
   });
   const [isLoading, setIsLoading] = useState(true);

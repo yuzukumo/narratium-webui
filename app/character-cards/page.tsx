@@ -27,7 +27,6 @@ import { motion } from "framer-motion";
 import ImportCharacterModal from "@/components/ImportCharacterModal";
 import EditCharacterModal from "@/components/EditCharacterModal";
 import CharacterCardGrid from "@/components/CharacterCardGrid";
-import CharacterCardCarousel from "@/components/CharacterCardCarousel";
 import { getAllCharacters } from "@/function/character/list";
 import { deleteCharacter } from "@/function/character/delete";
 import { trackButtonClick } from "@/utils/google-analytics";
@@ -43,6 +42,7 @@ interface Character {
   first_mes?: string;
   creatorcomment?: string;
   created_at: string;
+  last_used_at?: string;
   avatar_path?: string;
 }
 
@@ -58,22 +58,14 @@ interface Character {
  * @returns {JSX.Element} The complete character cards page interface
  */
 export default function CharacterCards() {
-  const { t, fontClass, serifFontClass } = useLanguage();
+  const { t, language, fontClass, serifFontClass } = useLanguage();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentCharacter, setCurrentCharacter] = useState<Character | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "carousel">("grid");
   const [mounted, setMounted] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState(false);
-
-  useEffect(() => {
-    const savedViewMode = localStorage.getItem("characterCardsViewMode");
-    if (savedViewMode === "grid" || savedViewMode === "carousel") {
-      setViewMode(savedViewMode);
-    }
-  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -93,10 +85,8 @@ export default function CharacterCards() {
 
   const fetchCharacters = async () => {
     setIsLoading(true);
-    const username = localStorage.getItem("username") || "";
-    const language = localStorage.getItem("language") || "zh";
     try {
-      const response = await getAllCharacters(language as "zh" | "en", username);
+      const response = await getAllCharacters(language);
 
       if (!response) {
         setCharacters([]);
@@ -142,7 +132,7 @@ export default function CharacterCards() {
 
   useEffect(() => {
     fetchCharacters();
-  }, []);
+  }, [language]);
 
   if (!mounted) return null;
 
@@ -184,31 +174,6 @@ export default function CharacterCards() {
             >
               <div className="flex items-center gap-3">
                 <h1 className={`text-xl sm:text-2xl magical-login-text ${serifFontClass}`}>{t("sidebar.characterCards")}</h1>
-                <motion.button
-                  className={`portal-button text-[#c0a480] hover:text-[#ffd475] p-2 border border-[#534741] rounded-lg cursor-pointer ${fontClass} translate-y-[1px]`}
-                  whileHover={{ scale: 1.05 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                  onClick={() => {
-                    trackButtonClick("view_mode_btn", "切换视图模式");
-                    const newViewMode = viewMode === "grid" ? "carousel" : "grid";
-                    setViewMode(newViewMode);
-                    localStorage.setItem("characterCardsViewMode", newViewMode);
-                  }}
-                >
-                  {viewMode === "grid" ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="7" height="7"></rect>
-                      <rect x="14" y="3" width="7" height="7"></rect>
-                      <rect x="14" y="14" width="7" height="7"></rect>
-                      <rect x="3" y="14" width="7" height="7"></rect>
-                    </svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
-                    </svg>
-                  )}
-                </motion.button>
               </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
                 <motion.div
@@ -273,14 +238,8 @@ export default function CharacterCards() {
                   {t("characterCardsPage.importFirstCharacter")}
                 </motion.div>
               </motion.div>
-            ) : viewMode === "grid" ? (
-              <CharacterCardGrid
-                characters={characters}
-                onEditClick={handleEditClick}
-                onDeleteClick={handleDeleteCharacter}
-              />
             ) : (
-              <CharacterCardCarousel
+              <CharacterCardGrid
                 characters={characters}
                 onEditClick={handleEditClick}
                 onDeleteClick={handleDeleteCharacter}

@@ -1,5 +1,6 @@
 import { NodeTool } from "@/lib/nodeflow/NodeTool";
 import { RegexProcessor } from "@/lib/core/regex-processor";
+import { RegexPlacement } from "@/lib/models/regex-script-model";
 
 export class RegexNodeTools extends NodeTool {
   protected static readonly toolType: string = "regex";
@@ -31,10 +32,16 @@ export class RegexNodeTools extends NodeTool {
   static async processRegex(
     response: string,
     characterId: string,
+    protagonistName?: string,
+    characterName?: string,
   ): Promise<{ replacedText: string}> {
     try {
       const result = await RegexProcessor.processFullContext(response, {
         ownerId: characterId,
+        placement: RegexPlacement.AI_OUTPUT,
+        isMarkdown: true,
+        protagonistName,
+        charName: characterName,
       });
 
       return {

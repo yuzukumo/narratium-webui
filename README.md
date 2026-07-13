@@ -1,79 +1,73 @@
 # Narratium
 
-AI character roleplay panel and local-first story workspace.
-
 ![Narratium banner](./public/banner.png)
 
-This repository is the current maintained continuation of a Narratium panel codebase restored from a local backup of an earlier fork. The original upstream repository, historical contributor graph, community links, and several old project resources are no longer available to the current maintainer, so future maintenance, releases, and issue tracking will happen here.
+Self-hosted AI character chat and story workspace.
 
-Current repository: [https://github.com/yuzukumo/narratium-webui](https://github.com/yuzukumo/narratium-webui)
+English | [简体中文](./README_ZH.md) | [繁體中文](./README_ZH-TW.md) | [Español](./README_ES.md) | [Français](./README_FR.md)
 
-[![GitHub stars](https://img.shields.io/github/stars/yuzukumo/narratium-webui?style=social)](https://github.com/yuzukumo/narratium-webui)
-[![GitHub forks](https://img.shields.io/github/forks/yuzukumo/narratium-webui?style=social)](https://github.com/yuzukumo/narratium-webui/forks)
-[![Last commit](https://img.shields.io/github/last-commit/yuzukumo/narratium-webui)](https://github.com/yuzukumo/narratium-webui/commits/main)
-[![License](https://img.shields.io/github/license/yuzukumo/narratium-webui)](./LICENSE)
+This repository was recreated from a local backup of an earlier fork and is now maintained by the current repository owner. The original upstream repository and contributor repositories are no longer available. The active project repository is [yuzukumo/narratium-webui](https://github.com/yuzukumo/narratium-webui).
 
-[Chinese README](./README_ZH.md) | [Getting Started](./docs/GETTING_STARTED.md) | [Issues](https://github.com/yuzukumo/narratium-webui/issues) | [Releases](https://github.com/yuzukumo/narratium-webui/releases)
+Narratium contains application code only. It does not include character cards, stories, presets, or other user-created content.
 
-## What This Is
+## What It Provides
 
-Narratium is a self-hostable web panel for AI character chat, branching conversations, prompt presets, world books, and regex-based text processing. It is designed to run locally or in a small private deployment, with user data handled in the browser/local environment rather than through a hosted service.
-
-This repository contains the panel and service source code only. It does not bundle character cards, story content, user-generated content, or community-contributed content assets.
-
-## Features
-
-- AI character chat workspace with long-form conversation flows.
-- SillyTavern-compatible PNG character card import.
-- Visual dialogue tree for tracing and switching conversation branches.
-- Prompt preset, world book, regex script, and advanced settings editors.
-- OpenAI, Anthropic, Gemini, and compatible API endpoint configuration.
-- Local import/export utilities for user data.
-- Docker Compose deployment and Pake packaging scripts.
+- Next.js frontend with a Go API backend and PostgreSQL storage.
+- Account login with administrator and regular-user roles.
+- Server-side storage for character cards, images, dialogues, presets, world books, regex scripts, and preferences.
+- SillyTavern PNG, JSON, and CharX character card import, including embedded character books, regex scripts, and CharX assets.
+- Administrator-managed API channels and model settings.
+- OpenAI Responses, OpenAI Chat Completions, Anthropic Messages, and Gemini `generateContent` adapters.
+- Streaming chat, branching dialogues, context management, prompt caching, billing, and per-user usage logs.
 
 ## Quick Start
 
-### Docker Compose
+Requirement: Docker with Compose.
 
 ```bash
-docker compose up -d
+export NARRATIUM_SECRET='replace-with-a-stable-random-value-of-at-least-32-characters'
+docker compose up -d --build
 ```
 
-Then open [http://localhost:5000](http://localhost:5000).
+Open <http://localhost:5000>. The first successfully registered account becomes the administrator. `NARRATIUM_SECRET` is required, derives the JWT and provider-key encryption keys, and must never be changed after first use.
 
-The compose file uses the current image name:
+In **Admin Panel**, create an API channel, select its protocol, enter its base URL and key, and add the original model IDs supported by that channel. Model IDs are free-form. Regular users only select models from enabled channels.
+
+The default host port is configured directly in `docker-compose.yml`:
 
 ```yaml
-ghcr.io/yuzukumo/narratium-webui:latest
+ports:
+  - "127.0.0.1:5000:8080"
 ```
 
-### From Source
+`NARRATIUM_MAX_BLOB_TOTAL_GB` defaults to `2`; set it to `0` to disable the per-user total storage quota.
 
-Recommended prerequisites:
+Back up `narratium-postgres` and keep `NARRATIUM_SECRET` in a secure password manager.
 
-- Node.js 20+
-- pnpm
-- Git
+## Development
+
+Toolchain: Node.js `24.18.0` LTS, pnpm `11.12.0`, Go `1.26.5`, and PostgreSQL `18`.
 
 ```bash
-git clone https://github.com/yuzukumo/narratium-webui.git
-cd narratium-webui
-pnpm install
-pnpm dev
+pnpm install --frozen-lockfile
 ```
 
-Then open [http://localhost:5000](http://localhost:5000).
-
-Useful scripts:
+See the [Getting Started guide](./docs/GETTING_STARTED.md) for backend and frontend startup. Run checks with:
 
 ```bash
-pnpm build
+pnpm typecheck
 pnpm lint
 pnpm test
+pnpm test:backend:race
+pnpm build
 ```
 
 ## License
 
-This repository is licensed under the MIT License. See [LICENSE](./LICENSE).
+Licensed under the [MIT License](./LICENSE). Imported or generated content remains subject to the terms of its source and creator.
 
-User-imported or user-generated content is outside the scope of this repository and is governed by its own source, creator, or platform terms.
+## Links
+
+- [Getting Started](./docs/GETTING_STARTED.md)
+- [Issues](https://github.com/yuzukumo/narratium-webui/issues)
+- [License](./LICENSE)

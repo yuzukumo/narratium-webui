@@ -8,7 +8,6 @@
  * - Preset management
  * - Message history and regeneration
  * - Branch switching in conversations
- * - User tour functionality
  * 
  * The page handles all character interactions and provides a rich
  * set of features for managing character dialogues and settings.
@@ -19,7 +18,6 @@
  * - WorldBookEditor: For world book management
  * - RegexScriptEditor: For regex script editing
  * - PresetEditor: For preset management
- * - UserTour: For user onboarding
  */
 
 "use client";
@@ -27,23 +25,28 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLanguage } from "@/app/i18n";
+import { defaultProtagonistName } from "@/lib/i18n/languages";
+import { toast } from "react-hot-toast";
 import CharacterSidebar from "@/components/CharacterSidebar";
 import { PromptType } from "@/lib/models/character-prompts-model";
 import { ParsedResponse } from "@/lib/models/parsed-response";
 import { v4 as uuidv4 } from "uuid";
 import { initCharacterDialogue } from "@/function/dialogue/init";
 import { getCharacterDialogue } from "@/function/dialogue/info";
-import { handleCharacterChatRequest } from "@/function/dialogue/chat";
+import { handleCharacterChatRequest, resumeCharacterChatRun } from "@/function/dialogue/chat";
 import { switchDialogueBranch } from "@/function/dialogue/truncate";
-import { deleteDialogueNode } from "@/function/dialogue/delete";
 import CharacterChatPanel from "@/components/CharacterChatPanel";
 import WorldBookEditor from "@/components/WorldBookEditor";
 import RegexScriptEditor from "@/components/RegexScriptEditor";
 import PresetEditor from "@/components/PresetEditor";
 import CharacterChatHeader from "@/components/CharacterChatHeader";
-import UserTour from "@/components/UserTour";
-import { useTour } from "@/hooks/useTour";
-import { getActiveApiConfig, getStoredResponseLength } from "@/utils/api-config";
+import { getStoredResponseLength } from "@/utils/api-config";
+import { useModels } from "@/contexts/ModelContext";
+import { APIError, parseAPIError } from "@/utils/api-client";
+import { acknowledgeChatRun, getPendingChatRuns } from "@/utils/chat-runs";
+import { LLMStreamError } from "@/utils/llm-api";
+import { NARRATIVE_MODE_DIRECTIVES } from "@/lib/prompts/preset-prompts";
+import { LocalCharacterRecordOperations } from "@/lib/data/character-record-operation";
 
 /**
  * Interface definitions for the component's data structures
@@ -53,6 +56,7 @@ interface Character {
   name: string;
   personality?: string;
   avatar_path?: string;
+  protagonistName?: string;
 }
 
 interface Message {
@@ -61,6 +65,42 @@ interface Message {
   content: string;
   timestamp?: string;
   parsedContent?: ParsedResponse | null;
+  nodeId?: string;
+  parentNodeId?: string;
+  alternativeIndex?: number;
+  alternativeCount?: number;
+  alternativeNodeIds?: string[];
+}
+
+type ActiveModes = {
+  "story-progress": boolean;
+  perspective: {
+    active: boolean;
+    mode: "novel" | "protagonist";
+  };
+  "scene-setting": boolean;
+};
+
+function formatDialogueMessages(dialogue: any): Message[] {
+  return (dialogue?.messages || []).map((msg: any) => ({
+    id: String(msg.id),
+    role: msg.role === "system" ? "assistant" : msg.role,
+    content: msg.content || "",
+    timestamp: msg.timestamp || new Date(dialogue.created_at).toISOString(),
+    parsedContent: msg.parsedContent || null,
+    nodeId: msg.nodeId || msg.node_id || String(msg.id),
+    parentNodeId: msg.parentNodeId || msg.parent_node_id,
+    alternativeIndex: msg.alternativeIndex,
+    alternativeCount: msg.alternativeCount,
+    alternativeNodeIds: msg.alternativeNodeIds,
+  }));
+}
+
+function visibleStoredUserMessage(content: string): string {
+  const wrapped = content.match(/<input_message>([\s\S]*?)<\/input_message>/)?.[1];
+  return (wrapped || content)
+    .replace(/^\s*(?:玩家输入指令|Player Input)[:：]\s*/i, "")
+    .trim();
 }
 
 /**
@@ -72,15 +112,20 @@ interface Message {
  * - Regex script management
  * - Preset configuration
  * - Message regeneration and branch switching
- * - User tour and onboarding
  * 
  * @returns {JSX.Element} The complete character interaction interface
  */
 export default function CharacterPage() {
   const searchParams = useSearchParams();
   const characterId = searchParams.get("id");
-  const { t, fontClass, serifFontClass } = useLanguage();
-  const { isTourVisible, currentTourSteps, startCharacterTour, completeTour, skipTour } = useTour();
+  const { t, language, fontClass, serifFontClass } = useLanguage();
+  const {
+    models,
+    activeModel,
+    loading: modelsLoading,
+    activateCharacter,
+    selectModel,
+  } = useModels();
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -94,9 +139,10 @@ export default function CharacterPage() {
   const [viewportReady, setViewportReady] = useState(false);
   const [suggestedInputs, setSuggestedInputs] = useState<string[]>([]);
   const initializationRef = useRef(false);
+  const generationControllerRef = useRef<AbortController | null>(null);
   const lastIsMobileRef = useRef<boolean | null>(null);
   const [activeView, setActiveView] = useState<"chat" | "worldbook" | "regex" | "preset">("chat");
-  const [activeModes, setActiveModes] = useState<Record<string, any>>({
+  const [activeModes, setActiveModes] = useState<ActiveModes>({
     "story-progress": false,
     "perspective": {
       active: false,
@@ -143,37 +189,18 @@ export default function CharacterPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    if (characterId) {
+      activateCharacter(characterId);
     }
+  }, [activateCharacter, characterId]);
 
-    window.dispatchEvent(
-      new CustomEvent("narratium:character-view-change", {
-        detail: { hideSettings: activeView !== "chat" },
-      }),
-    );
-  }, [activeView]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    return () => {
-      window.dispatchEvent(
-        new CustomEvent("narratium:character-view-change", {
-          detail: { hideSettings: false },
-        }),
-      );
-    };
-  }, []);
-
-  const truncateMessagesAfter = async (nodeId: string) => {
+  const handleSwitchBranch = async (nodeId: string) => {
     if (!characterId) return;
     
     try {
-      const messageIndex = messages.findIndex(msg => msg.id == nodeId);
-      if (messageIndex === -1) {
+      const knownAlternative = messages.some((msg) => msg.alternativeNodeIds?.includes(nodeId));
+      const visibleNode = messages.some((msg) => (msg.nodeId || msg.id) === nodeId);
+      if (!knownAlternative && !visibleNode) {
         console.warn(`Dialogue branch not found: ${nodeId}`);
         return;
       }
@@ -184,136 +211,66 @@ export default function CharacterPage() {
       });
       
       if (!response.success) {
-        console.error("Failed to truncate messages", response);
+        console.error("Failed to switch dialogue branch", response);
         return;
       }
       
       const dialogue = response.dialogue;
       
       if (dialogue) {
-        setTimeout(() => {
-          const formattedMessages = dialogue.messages.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role == "system" ? "assistant" : msg.role,
-            content: msg.content,
-            timestamp: msg.timestamp || new Date(dialogue.created_at).toISOString(),
-            parsedContent: msg.parsedContent || null,
-          }));
-
-          setMessages(formattedMessages);
-          
-          const lastMessage = dialogue.messages[dialogue.messages.length - 1];
-          if (lastMessage && lastMessage.parsedContent?.nextPrompts) {
-            setSuggestedInputs(lastMessage.parsedContent.nextPrompts);
-          } else {
-            setSuggestedInputs([]);
-          }
-        }, 100);
-      } else {
+        const formattedMessages = formatDialogueMessages(dialogue);
+        setMessages(formattedMessages);
+        const lastAssistant = [...formattedMessages].reverse().find((msg) => msg.role === "assistant");
+        setSuggestedInputs(lastAssistant?.parsedContent?.nextPrompts || []);
       }
     } catch (error) {
-      console.error("Error truncating messages:", error);
+      console.error("Error switching dialogue branch:", error);
     }
   };
 
   const handleRegenerate = async (nodeId: string) => {
-    if (!characterId) return;
-    
-    try {
-      const messageIndex = messages.findIndex(msg => msg.id === nodeId);
-      if (messageIndex === -1) {
-        console.warn(`Message not found: ${nodeId}`);
-        return;
-      }
-      const messageToRegenerate = messages[messageIndex];
+    const messageIndex = messages.findIndex((msg) => (
+      (msg.role === "assistant" || msg.role === "error")
+      && (msg.nodeId || msg.id) === nodeId
+    ));
+    const target = messages[messageIndex];
+    if (!target || (target.role !== "assistant" && target.role !== "error")) return;
 
-      if (messageToRegenerate.role === "error") {
-        let previousUserMessage = null;
-        for (let i = messageIndex - 1; i >= 0; i--) {
-          if (messages[i].role === "user") {
-            previousUserMessage = messages[i];
-            break;
-          }
-        }
+    const userMessage = messages.find((msg) => msg.role === "user" && (msg.nodeId || msg.id) === nodeId)
+      || [...messages.slice(0, messageIndex)].reverse().find((msg) => msg.role === "user");
+    if (!userMessage) return;
 
-        if (!previousUserMessage) {
-          console.warn("No previous user message found for retry");
-          return;
-        }
+    const targetNodeId = target.nodeId || target.id;
+    const parentNodeId = target.parentNodeId || "root";
+    const userIndex = messages.findIndex((msg) => msg.role === "user" && (msg.nodeId || msg.id) === targetNodeId);
+    const prefix = messages.slice(0, userIndex >= 0 ? userIndex : messageIndex);
+    await handleSendMessage(visibleStoredUserMessage(userMessage.content), {
+      parentNodeId,
+      promptDirectives: target.parsedContent?.promptDirectives || userMessage.parsedContent?.promptDirectives || [],
+      displayPrefix: prefix,
+    });
+  };
 
-        await handleSendMessage(previousUserMessage.content, {
-          appendUserMessage: false,
-          assistantMessageId: nodeId,
-        });
-        return;
-      }
-
-      if (messageToRegenerate.role !== "assistant") {
-        console.warn("Can only regenerate assistant messages");
-        return;
-      }
-
-      let userMessage = null;
-      for (let i = messageIndex - 1; i >= 0; i--) {
-        if (messages[i].role === "user") {
-          userMessage = messages[i];
-          break;
-        }
-      }
-
-      if (!userMessage) {
-        console.warn("No previous user message found for regeneration");
-        return;
-      }
-
-      const response = await deleteDialogueNode({
-        characterId,
-        nodeId,
-      });
-      if (!response.success) {
-        console.error("Failed to delete message", response);
-        return;
-      }
-      
-      const dialogue = response.dialogue;
-      
-      if (dialogue) {
-        setTimeout(() => {
-          const formattedMessages = dialogue.messages.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role == "system" ? "assistant" : msg.role,
-            content: msg.content,
-            timestamp: msg.timestamp || new Date(dialogue.created_at).toISOString(),
-            parsedContent: msg.parsedContent || null,
-          }));
-
-          setMessages(formattedMessages);
-          
-          const lastMessage = dialogue.messages[dialogue.messages.length - 1];
-          if (lastMessage && lastMessage.parsedContent?.nextPrompts) {
-            setSuggestedInputs(lastMessage.parsedContent.nextPrompts);
-          } else {
-            setSuggestedInputs([]);
-          }
-        }, 100);
-      }
-
-      setTimeout(async () => {
-        await handleSendMessage(userMessage.content);
-      }, 300);
-
-    } catch (error) {
-      console.error("Error regenerating message:", error);
-    }
+  const handleEditUserMessage = async (nodeId: string, editedContent: string) => {
+    const target = messages.find((msg) => msg.role === "user" && (msg.nodeId || msg.id) === nodeId);
+    if (!target || !editedContent.trim()) return;
+    const index = messages.indexOf(target);
+    const prefix = messages.slice(0, index);
+    const assistantForTurn = messages.find((msg) => (
+      msg.role === "assistant" && (msg.nodeId || msg.id) === nodeId
+    ));
+    await handleSendMessage(editedContent.trim(), {
+      parentNodeId: target.parentNodeId || "root",
+      promptDirectives: assistantForTurn?.parsedContent?.promptDirectives || [],
+      displayPrefix: prefix,
+    });
   };
 
   const fetchLatestDialogue = async () => {
     if (!characterId) return;
 
     try {
-      const username = localStorage.getItem("username") || undefined;
-      const currentLanguage = localStorage.getItem("language") as "en" | "zh";
-      const response = await getCharacterDialogue(characterId, currentLanguage, username);
+      const response = await getCharacterDialogue(characterId, language);
       if (!response.success) {
         throw new Error(`Failed to load dialogue: ${response}`);
       }
@@ -321,28 +278,24 @@ export default function CharacterPage() {
       const dialogue = response.dialogue;
 
       if (dialogue && dialogue.messages) {
-        const formattedMessages = dialogue.messages.map((msg: any) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp || new Date(dialogue.created_at).toISOString(),
-          parsedContent: msg.parsedContent || null,
-        }));
+        const formattedMessages = formatDialogueMessages(dialogue);
         setMessages(formattedMessages);
-        setSuggestedInputs(dialogue.messages[dialogue.messages.length - 1].parsedContent?.nextPrompts || []);
-      } else {
+        const lastAssistant = [...formattedMessages].reverse().find((msg) => msg.role === "assistant");
+        setSuggestedInputs(lastAssistant?.parsedContent?.nextPrompts || []);
       }
     } catch (err) {
       console.error("Error refreshing dialogue:", err);
     }
   };
 
-  const createPendingAssistantMessage = (id: string): Message => ({
+  const createPendingAssistantMessage = (id: string, metadata: Partial<Message> = {}): Message => ({
     id,
     role: "assistant",
     content: "",
     timestamp: new Date().toISOString(),
     parsedContent: null,
+    nodeId: id,
+    ...metadata,
   });
 
   const createInlineErrorMessage = (message: string, id = `error-${Date.now()}`): Message => ({
@@ -357,40 +310,27 @@ export default function CharacterPage() {
 
     setMessages((prev) => {
       if (replaceMessageId && prev.some((item) => item.id === replaceMessageId)) {
-        return prev.map((item) => (item.id === replaceMessageId ? errorMessage : item));
+        return prev.map((item) => (
+          item.id === replaceMessageId
+            ? { ...item, ...errorMessage, nodeId: item.nodeId || item.id }
+            : item
+        ));
       }
 
       return [...prev, errorMessage];
     });
   };
 
-  const getResponseErrorMessage = async (response: Response) => {
-    const fallback = `Failed to send message: ${response.status}`;
-    const contentType = response.headers.get("Content-Type") || "";
-
-    if (contentType.includes("application/json")) {
-      const payload = await response.json().catch(() => null) as {
-        message?: string;
-        error?: string | { message?: string };
-      } | null;
-
-      if (typeof payload?.message === "string" && payload.message.trim()) {
-        return payload.message.trim();
-      }
-
-      if (typeof payload?.error === "string" && payload.error.trim()) {
-        return payload.error.trim();
-      }
-
-      if (typeof payload?.error === "object" && typeof payload.error?.message === "string" && payload.error.message.trim()) {
-        return payload.error.message.trim();
-      }
+  const generationErrorMessage = (reason: unknown): string => {
+    const code = reason instanceof APIError || reason instanceof LLMStreamError
+      ? reason.code
+      : "";
+    if (code === "insufficient_user_quota" || code === "insufficient_balance") {
+      return t("game.insufficientQuota");
     }
-
-    const text = await response.text().catch(() => "");
-    return text.trim() || fallback;
+    return reason instanceof Error ? reason.message : t("game.actionFailed");
   };
-  
+
   useEffect(() => {
     const loadCharacterAndDialogue = async () => {
       if (!characterId) return;
@@ -399,34 +339,31 @@ export default function CharacterPage() {
       setPageError("");
       
       try {
-        const username = localStorage.getItem("username") || undefined;
-        const currentLanguage = localStorage.getItem("language") as "en" | "zh";
-        const response = await getCharacterDialogue(characterId, currentLanguage, username);
+        const response = await getCharacterDialogue(characterId, language);
         if (!response.success) {
           throw new Error(`Failed to load character: ${response}`);
         }
         
         const dialogue = response.dialogue;
         const character = response.character;
+        void LocalCharacterRecordOperations.touchCharacter(characterId).catch((error) => {
+          console.error("Failed to update character last-used time:", error);
+        });
 
         const characterInfo = {
           id: character.id,
           name: character.data.name,
           personality: character.data.personality,
           avatar_path: character.imagePath,
+          protagonistName: character.protagonistName,
         };
         setCharacter(characterInfo);
 
         if (dialogue && dialogue.messages) {
-          const formattedMessages = dialogue.messages.map((msg: any) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            timestamp: new Date(dialogue.created_at).toISOString(),
-            parsedContent: msg.parsedContent || null,
-          }));
+          const formattedMessages = formatDialogueMessages(dialogue);
           setMessages(formattedMessages);
-          setSuggestedInputs(dialogue.messages[dialogue.messages.length - 1].parsedContent?.nextPrompts || []);
+          const lastAssistant = [...formattedMessages].reverse().find((msg) => msg.role === "assistant");
+          setSuggestedInputs(lastAssistant?.parsedContent?.nextPrompts || []);
         }
         else if (!initializationRef.current) {
           initializationRef.current = true;
@@ -446,17 +383,9 @@ export default function CharacterPage() {
   const initializeNewDialogue = async (charId: string) => {
     try {
       setIsInitializing(true);
-      const username = localStorage.getItem("username") || "";
-      const language = localStorage.getItem("language") || "zh";
-      const activeConfig = getActiveApiConfig();
       const initData = await initCharacterDialogue({
-        username,
         characterId: charId,
-        modelName: activeConfig?.model || "",
-        baseUrl: activeConfig?.baseUrl || "",
-        apiKey: activeConfig?.apiKey || "",
-        llmType: activeConfig?.type || "openai",
-        language: language as "zh" | "en",
+        language,
       });
 
       if (!initData.success) {
@@ -465,6 +394,11 @@ export default function CharacterPage() {
       if (initData.firstMessage) {
         setMessages([{
           id: initData.nodeId,
+          nodeId: initData.nodeId,
+          parentNodeId: "root",
+          alternativeIndex: 1,
+          alternativeCount: initData.alternativeNodeIds.length,
+          alternativeNodeIds: initData.alternativeNodeIds,
           role: "assistant",
           content: initData.firstMessage,
           timestamp: new Date().toISOString(),
@@ -479,210 +413,294 @@ export default function CharacterPage() {
     }
   };
 
+  const consumeChatResponse = async (
+    response: Response,
+    assistantMessageId: string,
+    responseNodeId: string,
+  ): Promise<boolean> => {
+    if (!response.ok) {
+      throw await parseAPIError(response);
+    }
+    if (!(response.headers.get("Content-Type") || "").includes("text/event-stream") || !response.body) {
+      throw new Error(t("game.cannotReadResponseStream") || "The server did not return a response stream.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult: any = null;
+    const updateAssistantMessage = (
+      content: string,
+      parsedContent?: ParsedResponse | null,
+      nextMessageId?: string,
+    ) => {
+      setMessages((prev) => prev.map((item) => (
+        item.id === assistantMessageId
+          ? {
+            ...item,
+            id: nextMessageId || item.id,
+            role: "assistant",
+            content,
+            parsedContent: parsedContent ?? item.parsedContent ?? null,
+            alternativeIndex: parsedContent?.alternativeIndex ?? item.alternativeIndex,
+            alternativeCount: parsedContent?.alternativeCount ?? item.alternativeCount,
+            alternativeNodeIds: parsedContent?.alternativeNodeIds ?? item.alternativeNodeIds,
+          }
+          : item
+      )));
+    };
+    const handleFrame = async (frame: string) => {
+      const data = frame
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim())
+        .filter(Boolean)
+        .join("\n");
+      if (!data || data === "[DONE]") return;
+      const event = JSON.parse(data) as {
+        type?: string;
+        content?: string;
+        parsedContent?: ParsedResponse | null;
+        success?: boolean;
+        message?: string;
+        code?: string;
+        request_id?: string;
+        run_id?: string;
+        acknowledge?: boolean;
+      };
+      if (event.type === "delta") {
+        updateAssistantMessage(event.content || "");
+      } else if (event.type === "complete") {
+        finalResult = event;
+        updateAssistantMessage(event.content || "", event.parsedContent || null, responseNodeId);
+      } else if (event.type === "stopped") {
+        finalResult = event;
+        if (event.content) {
+          updateAssistantMessage(event.content, event.parsedContent || null, responseNodeId);
+        } else {
+          setMessages((prev) => prev.filter((item) => item.id !== assistantMessageId));
+        }
+      } else if (event.type === "error") {
+        // Provider failures are acknowledged only after an active tab receives
+        // them. Local post-processing failures stay pending for the next tab.
+        if (event.run_id && event.acknowledge) {
+          await acknowledgeChatRun(event.run_id).catch(() => undefined);
+        }
+        throw new LLMStreamError(
+          event.message || "Failed to get response",
+          event.code || "chat_run_failed",
+          event.request_id || "",
+        );
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() || "";
+      for (const frame of frames) await handleFrame(frame);
+      if (done) break;
+    }
+    if (buffer.trim()) await handleFrame(buffer);
+    if (!finalResult?.success) {
+      throw new Error(finalResult?.message || "Failed to get response");
+    }
+    if (finalResult.parsedContent?.nextPrompts) {
+      setSuggestedInputs(finalResult.parsedContent.nextPrompts);
+    }
+    return true;
+  };
+
+  const buildPromptMessage = (rawMessage: string, directives: string[]): string => {
+    if (directives.length === 0) {
+      return `<input_message>\n${rawMessage}\n</input_message>`;
+    }
+    return [
+      "<input_message>",
+      rawMessage,
+      "</input_message>",
+      "<response_instructions>",
+      directives.join(" "),
+      "</response_instructions>",
+    ].join("\n");
+  };
+
   const handleSendMessage = async (
     message: string,
     options?: {
-      appendUserMessage?: boolean;
-      assistantMessageId?: string;
+      parentNodeId?: string;
+      promptDirectives?: string[];
+      displayPrefix?: Message[];
     },
   ): Promise<boolean> => {
-    if (!character || isSending) return false;
+    if (!character || isSending || !message.trim()) return false;
 
-    const appendUserMessage = options?.appendUserMessage !== false;
     const responseNodeId = uuidv4();
-    const assistantMessageId = options?.assistantMessageId || responseNodeId;
-    let shouldStream = false;
+    const userMessageId = `pending-user:${responseNodeId}`;
+    const assistantMessageId = `pending-assistant:${responseNodeId}`;
+    const promptDirectives = options?.promptDirectives || [];
+    const inferredParentNodeId = options?.parentNodeId || [...messages]
+      .reverse()
+      .find((item) => item.role === "assistant" && item.nodeId)?.nodeId;
+    const parentNodeId = inferredParentNodeId || "root";
+    let requestController: AbortController | null = null;
+
+    const userMessage: Message = {
+      id: userMessageId,
+      nodeId: responseNodeId,
+      parentNodeId,
+      role: "user",
+      content: message,
+      timestamp: new Date().toISOString(),
+    };
+    const pending = createPendingAssistantMessage(assistantMessageId, {
+      nodeId: responseNodeId,
+      parentNodeId,
+      parsedContent: promptDirectives.length > 0 ? { promptDirectives } : null,
+    });
+
+    // Keep the submitted message visible even when validation or the provider
+    // fails before a persisted dialogue node can be created.
+    setMessages((prev) => [
+      ...(options?.displayPrefix || prev),
+      userMessage,
+      pending,
+    ]);
 
     try {
-      const activeConfig = getActiveApiConfig();
-      if (!activeConfig?.model || !activeConfig?.apiKey) {
+      const requestModel = activeModel;
+      if (!requestModel) {
         throw new Error(
           t("modelSettings.apiConfigRequired")
-          || "请先在模型设置中填写并启用 Endpoint、模型和 API Key。",
+          || "请先选择管理员已启用的模型。",
         );
+      }
+      const modelMaxOutputTokens = requestModel.capabilities.max_output_tokens;
+      if (
+        typeof modelMaxOutputTokens !== "number"
+        || !Number.isSafeInteger(modelMaxOutputTokens)
+        || modelMaxOutputTokens < 1
+      ) {
+        throw new Error("The selected model has an invalid maximum output capability.");
       }
 
       setIsSending(true);
+      requestController = new AbortController();
+      generationControllerRef.current = requestController;
       
       setSuggestedInputs([]);
 
-      if (appendUserMessage) {
-        const userMessage = {
-          id: new Date().toISOString() + "-user",
-          role: "user",
-          content: message,
-          timestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, userMessage, createPendingAssistantMessage(assistantMessageId)]);
-      } else {
-        setMessages((prev) => {
-          if (prev.some((item) => item.id === assistantMessageId)) {
-            return prev.map((item) => (
-              item.id === assistantMessageId
-                ? createPendingAssistantMessage(assistantMessageId)
-                : item
-            ));
-          }
-
-          return [...prev, createPendingAssistantMessage(assistantMessageId)];
-        });
-      }
-
-      const language = localStorage.getItem("language") || "zh";
       const promptType = localStorage.getItem("promptType");
-      const username = localStorage.getItem("username") || "";
       const responseLength = getStoredResponseLength();
-      const fastModel = localStorage.getItem("fastModelEnabled") === "true";
-      shouldStream = activeModes.streaming === true;
-
       const response = await handleCharacterChatRequest({
-        username,
         characterId: character.id,
-        message,
-        modelName: activeConfig.model,
-        baseUrl: activeConfig.baseUrl,
-        apiKey: activeConfig.apiKey,
-        llmType: activeConfig.type,
-        reasoningEffort: activeConfig.reasoningEffortEnabled ? activeConfig.reasoningEffort : undefined,
-        language: language as "zh" | "en",
-        streaming: shouldStream,
+        characterName: character.name,
+        message: buildPromptMessage(message, promptDirectives),
+        storedUserMessage: message,
+        promptDirectives,
+        modelId: requestModel.id,
+        modelName: requestModel.external_id,
+        contextWindow: requestModel.capabilities.context_window || undefined,
+        compactionThreshold: requestModel.capabilities.compaction_threshold || undefined,
+        modelMaxOutputTokens,
+        language,
         promptType: promptType as PromptType,
         number: responseLength,
         nodeId: responseNodeId,
-        fastModel: fastModel,
+        parentNodeId,
+        signal: requestController.signal,
       });
 
-      if (!response.ok) {
-        throw new Error(await getResponseErrorMessage(response));
-      }
-
-      const contentType = response.headers.get("Content-Type") || "";
-
-      if (shouldStream && contentType.includes("text/event-stream")) {
-        if (!response.body) {
-          throw new Error(t("game.cannotReadResponseStream") || "Cannot read response stream");
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let finalResult: any = null;
-
-        const updateAssistantMessage = (
-          content: string,
-          parsedContent?: ParsedResponse | null,
-          nextMessageId?: string,
-        ) => {
-          setMessages((prev) => prev.map((item) => (
-            item.id === assistantMessageId
-              ? {
-                ...item,
-                id: nextMessageId || item.id,
-                role: "assistant",
-                content,
-                parsedContent: parsedContent ?? item.parsedContent ?? null,
-              }
-              : item
-          )));
-        };
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const frames = buffer.split("\n\n");
-          buffer = frames.pop() || "";
-
-          for (const frame of frames) {
-            const dataLines = frame
-              .split("\n")
-              .map((line) => line.trim())
-              .filter((line) => line.startsWith("data:"))
-              .map((line) => line.slice(5).trim())
-              .filter(Boolean);
-
-            if (dataLines.length === 0) {
-              continue;
-            }
-
-            const event = JSON.parse(dataLines.join("\n"));
-
-            if (event.type === "delta") {
-              updateAssistantMessage(event.content || "");
-              continue;
-            }
-
-            if (event.type === "complete") {
-              finalResult = event;
-              updateAssistantMessage(event.content || "", event.parsedContent || null, responseNodeId);
-              continue;
-            }
-
-            if (event.type === "error") {
-              throw new Error(event.message || "Failed to get response");
-            }
-          }
-        }
-
-        if (!finalResult?.success) {
-          throw new Error(finalResult?.message || "Failed to get response");
-        }
-
-        if (finalResult.parsedContent?.nextPrompts) {
-          setSuggestedInputs(finalResult.parsedContent.nextPrompts);
-        }
-
-        return true;
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setMessages((prev) => prev.map((item) => (
-          item.id === assistantMessageId
-            ? {
-              ...item,
-              id: responseNodeId,
-              role: "assistant",
-              content: result.content || "",
-              timestamp: new Date().toISOString(),
-              parsedContent: result.parsedContent || null,
-            }
-            : item
-        )));
-        
-        if (result.parsedContent?.nextPrompts) {
-          setSuggestedInputs(result.parsedContent.nextPrompts);
-        }
-
-        return true;
-      } else {
-        throw new Error(result.message || "Failed to get response");
-      }
+	  return await consumeChatResponse(response, assistantMessageId, responseNodeId);
     } catch (err) {
+      if (requestController?.signal.aborted) {
+        setMessages((prev) => prev.filter((item) => (
+          item.id !== assistantMessageId || item.content.trim() !== ""
+        )));
+        return true;
+      }
       console.error("Error sending message:", err);
-      const errorMessage = err instanceof Error ? err.message : "An error occurred";
-      upsertInlineErrorMessage(errorMessage, assistantMessageId);
+      upsertInlineErrorMessage(generationErrorMessage(err), assistantMessageId);
 
       return false;
     } finally {
+      if (generationControllerRef.current === requestController) {
+        generationControllerRef.current = null;
+      }
       setIsSending(false);
     }
   };
 
+  const resumedCharacterRef = useRef<string | null>(null);
   useEffect(() => {
-    if (character && !isLoading && !isInitializing && !pageError) {
-      const hasSeenCharacterTour = localStorage.getItem("narratium_character_tour_completed");
-      if (!hasSeenCharacterTour) {
-        setTimeout(() => {
-          startCharacterTour();
-        }, 2000);
+    if (!character || !characterId || resumedCharacterRef.current === character.id) return;
+    resumedCharacterRef.current = character.id;
+    let disposed = false;
+    void (async () => {
+      try {
+        const pendingRuns = await getPendingChatRuns(character.id);
+        if (pendingRuns.length === 0 || disposed) return;
+        setIsSending(true);
+        for (const run of pendingRuns) {
+          if (disposed) return;
+          const responseNodeId = run.node_id;
+          const pendingUserMessageId = `pending-user:${run.node_id}`;
+          const pendingAssistantMessageId = `pending-assistant:${run.id}`;
+          setMessages((previous) => {
+            if (previous.some((item) => (item.nodeId || item.id) === responseNodeId)) {
+              return previous;
+            }
+            const parentIndex = run.parent_node_id === "root"
+              ? -1
+              : previous.findIndex((item) => (item.nodeId || item.id) === run.parent_node_id);
+            const prefix = parentIndex >= 0 ? previous.slice(0, parentIndex + 1) : [];
+            return [
+              ...prefix,
+              {
+                id: pendingUserMessageId,
+                nodeId: responseNodeId,
+                parentNodeId: run.parent_node_id,
+                role: "user",
+                content: run.user_message,
+                timestamp: run.created_at,
+              },
+              createPendingAssistantMessage(pendingAssistantMessageId, {
+                nodeId: responseNodeId,
+                parentNodeId: run.parent_node_id,
+              }),
+            ];
+          });
+          const controller = new AbortController();
+          generationControllerRef.current = controller;
+          try {
+            const response = await resumeCharacterChatRun({
+              run,
+              characterId: character.id,
+              protagonistName: character.protagonistName || defaultProtagonistName(language),
+              characterName: character.name,
+              signal: controller.signal,
+            });
+            await consumeChatResponse(response, pendingAssistantMessageId, run.node_id);
+          } catch (error) {
+            if (!controller.signal.aborted) {
+              upsertInlineErrorMessage(generationErrorMessage(error), pendingAssistantMessageId);
+            }
+          } finally {
+            if (generationControllerRef.current === controller) generationControllerRef.current = null;
+          }
+        }
+      } catch (error) {
+        console.error("Failed to resume chat runs:", error);
+      } finally {
+        if (!disposed) setIsSending(false);
       }
-    }
-  }, [character, isLoading, isInitializing, pageError, startCharacterTour]);
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [character, characterId, language]);
 
   useEffect(() => {
     const handleSwitchToPresetView = (event: any) => {
@@ -749,48 +767,29 @@ export default function CharacterPage() {
     e.preventDefault();
     if (!userInput.trim() || isSending) return;
   
-    let message = userInput;
-    let hints: string[] = [];
+    const rawMessage = userInput.trim();
+    const hints: string[] = [];
   
     if (activeModes["story-progress"]) {
-      const progressHint = t("characterChat.storyProgressHint");
-      hints.push(progressHint);
+      hints.push(NARRATIVE_MODE_DIRECTIVES.storyProgress);
     }
   
     if (activeModes["perspective"].active) {
       if (activeModes["perspective"].mode === "novel") {
-        const novelHint = t("characterChat.novelPerspectiveHint");
-        hints.push(novelHint);
+        hints.push(NARRATIVE_MODE_DIRECTIVES.novelPerspective);
       } else if (activeModes["perspective"].mode === "protagonist") {
-        const protagonistHint = t("characterChat.protagonistPerspectiveHint");
-        hints.push(protagonistHint);
+        hints.push(NARRATIVE_MODE_DIRECTIVES.protagonistPerspective);
       }
     }
   
     if (activeModes["scene-setting"]) {
-      const sceneSettingHint = t("characterChat.sceneTransitionHint");
-      hints.push(sceneSettingHint);
+      hints.push(NARRATIVE_MODE_DIRECTIVES.sceneTransition);
     }
   
-    if (hints.length > 0) {
-      message = `
-      <input_message>
-      ${t("characterChat.playerInput")}：${userInput}
-      </input_message>
-      <response_instructions>
-      ${t("characterChat.responseInstructions")}：${hints.join(" ")}
-      </response_instructions>
-          `.trim();
-    } else {
-      message = `
-      <input_message>
-      ${t("characterChat.playerInput")}：${userInput}
-      </input_message>
-          `.trim();
+    const sent = await handleSendMessage(rawMessage, { promptDirectives: hints });
+    if (sent) {
+      setUserInput("");
     }
-  
-    setUserInput("");
-    await handleSendMessage(message);
   };
 
   const toggleSidebar = () => {
@@ -800,6 +799,28 @@ export default function CharacterPage() {
   const handleSuggestedInput = (input: string) => {
     setUserInput(input);
   };
+
+  const handleStopGeneration = () => {
+    generationControllerRef.current?.abort();
+  };
+
+  const handleModelChange = (modelId: string) => {
+    if (activeModel?.id === modelId) {
+      return;
+    }
+    selectModel(modelId);
+    toast.success(t("notifications.modelSelectedNextRequest"));
+  };
+
+  const latestUsage = [...messages]
+    .reverse()
+    .find((message) => message.parsedContent?.usage)
+    ?.parsedContent?.usage;
+  const contextUsedTokens = latestUsage
+    ? latestUsage.inputTokens
+      + latestUsage.cacheCreationInputTokens
+      + latestUsage.cacheReadInputTokens
+    : 0;
 
   if (!viewportReady) {
     return null;
@@ -829,14 +850,18 @@ export default function CharacterPage() {
         }}
       />
 
-      <div className="flex-1 w-full min-w-0 fantasy-bg h-full transition-all duration-300 ease-in-out flex flex-col overflow-x-hidden">
+      <div className="fantasy-bg flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out">
         {activeView === "chat" && (
           <CharacterChatHeader
             character={character}
             serifFontClass={serifFontClass}
             sidebarCollapsed={sidebarCollapsed}
             activeView={activeView}
+            models={models}
+            activeModel={activeModel}
+            modelsLoading={modelsLoading}
             toggleSidebar={toggleSidebar}
+            onModelChange={handleModelChange}
             onSwitchToView={switchToView}
             onToggleView={toggleView}
             onToggleRegexEditor={toggleRegexEditor}
@@ -852,14 +877,18 @@ export default function CharacterPage() {
             isSending={isSending}
             suggestedInputs={suggestedInputs}
             onSubmit={handleSubmit}
+            onStop={handleStopGeneration}
             onSuggestedInput={handleSuggestedInput}
-            onTruncate={truncateMessagesAfter}
+            onSwitchBranch={handleSwitchBranch}
             onRegenerate={handleRegenerate}
+            onEditUserMessage={handleEditUserMessage}
             fontClass={fontClass}
             serifFontClass={serifFontClass}
             t={t}
             activeModes={activeModes}
             setActiveModes={setActiveModes}
+            contextUsedTokens={contextUsedTokens}
+            contextWindow={activeModel?.capabilities.context_window || 0}
           />
         ) : activeView === "worldbook" ? (
           <WorldBookEditor
@@ -881,18 +910,6 @@ export default function CharacterPage() {
           />
         )}
       </div>
-      <UserTour
-        steps={currentTourSteps}
-        isVisible={isTourVisible}
-        onComplete={() => {
-          completeTour();
-          localStorage.setItem("narratium_character_tour_completed", "true");
-        }}
-        onSkip={() => {
-          skipTour();
-          localStorage.setItem("narratium_character_tour_completed", "true");
-        }}
-      />
     </div>
   );
 }

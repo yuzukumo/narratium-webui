@@ -5,6 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/app/i18n";
 import { trackButtonClick } from "@/utils/google-analytics";
 import { handleCharacterUpload } from "@/function/character/import";
+import { parseCharacterBundle } from "@/utils/character-parser";
+import { embeddedRegexScripts, normalizeCharacterCard } from "@/lib/character-card/normalize";
+import {
+  MAX_PROTAGONIST_NAME_LENGTH,
+  normalizeProtagonistName,
+} from "@/lib/data/character-record-operation";
 
 interface ImportCharacterModalProps {
   isOpen: boolean;
@@ -17,8 +23,31 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [embeddedScriptCount, setEmbeddedScriptCount] = useState(0);
+  const [trustEmbeddedRegex, setTrustEmbeddedRegex] = useState(false);
+  const [protagonistName, setProtagonistName] = useState("");
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isCharacterCardFile = (file: File): boolean => {
+    const name = file.name.toLowerCase();
+    return name.endsWith(".png") || name.endsWith(".json") || name.endsWith(".charx");
+  };
+
+  const selectFile = async (file: File) => {
+    setSelectedFile(file);
+    setError("");
+    setEmbeddedScriptCount(0);
+    setTrustEmbeddedRegex(false);
+    setProtagonistName("");
+    try {
+      const bundle = await parseCharacterBundle(file);
+      const card = normalizeCharacterCard(JSON.parse(bundle.data));
+      setEmbeddedScriptCount(embeddedRegexScripts(card).length);
+    } catch {
+      // The import action reports malformed card metadata consistently.
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -36,9 +65,8 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (file.type === "image/png") {
-        setSelectedFile(file);
-        setError("");
+      if (isCharacterCardFile(file)) {
+        void selectFile(file);
       } else {
         setError(t("importCharacterModal.pngOnly"));
       }
@@ -48,9 +76,8 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      if (file.type === "image/png") {
-        setSelectedFile(file);
-        setError("");
+      if (isCharacterCardFile(file)) {
+        void selectFile(file);
       } else {
         setError(t("importCharacterModal.pngOnly"));
       }
@@ -63,14 +90,21 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
       return;
     }
 
+    try {
+      normalizeProtagonistName(protagonistName);
+    } catch {
+      setError(t("importCharacterModal.protagonistNameRequired"));
+      return;
+    }
+
     setIsUploading(true);
     setError("");
 
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      const response = await handleCharacterUpload(selectedFile);
+      const response = await handleCharacterUpload(selectedFile, {
+        protagonistName,
+        trustEmbeddedRegex,
+      });
 
       if (!response.success) {
         throw new Error(t("importCharacterModal.uploadFailed"));
@@ -88,6 +122,9 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
 
   const resetForm = () => {
     setSelectedFile(null);
+    setEmbeddedScriptCount(0);
+    setTrustEmbeddedRegex(false);
+    setProtagonistName("");
     setError("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -118,7 +155,7 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="bg-[#1e1c1b] bg-opacity-75 border border-[#534741] rounded-lg shadow-xl w-full max-w-md relative z-10 overflow-hidden fantasy-bg backdrop-filter backdrop-blur-sm"
+            className="fantasy-bg fantasy-scrollbar relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-[#534741] bg-[#1e1c1b] bg-opacity-75 shadow-xl backdrop-filter backdrop-blur-sm"
           >
             <div className="p-6">
               <h2 className={`text-xl text-[#eae6db] mb-4 ${serifFontClass}`}>{t("importCharacterModal.title")}</h2>
@@ -138,7 +175,7 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
                   type="file"
                   ref={fileInputRef}
                   className="hidden"
-                  accept="image/png"
+                  accept="image/png,.json,.charx,application/json,application/zip"
                   onChange={handleFileSelect}
                 />
                 
@@ -160,11 +197,46 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
                   )}
                 </div>
               </div>
+
+              {selectedFile && (
+                <label className={`mb-4 block text-sm text-[#c0a480] ${fontClass}`}>
+                  <span className="block text-xs font-medium text-[#d8c9b3]">
+                    {t("importCharacterModal.protagonistName")}
+                  </span>
+                  <input
+                    autoComplete="off"
+                    autoFocus
+                    maxLength={MAX_PROTAGONIST_NAME_LENGTH}
+                    value={protagonistName}
+                    onChange={(event) => {
+                      setProtagonistName(event.target.value);
+                      setError("");
+                    }}
+                    className="mt-1.5 h-10 w-full rounded-md border border-[#534741] bg-[#171513] px-3 text-sm text-[#eae6db] outline-none transition-colors placeholder:text-[#706455] focus:border-amber-500/60 focus:ring-2 focus:ring-amber-500/10"
+                    placeholder={t("importCharacterModal.protagonistNamePlaceholder")}
+                  />
+                  <span className="mt-1.5 block text-[11px] text-[#817361]">
+                    {t("importCharacterModal.protagonistNameImmutable")}
+                  </span>
+                </label>
+              )}
               
               {error && (
                 <div className="text-[#e57373] text-sm mb-4 text-center">
                   {error}
                 </div>
+              )}
+
+              {embeddedScriptCount > 0 && (
+                <label className={`mb-4 flex cursor-pointer items-center gap-3 rounded-md border border-[#534741] bg-[#252220]/70 px-3 py-2.5 text-sm text-[#c0a480] ${fontClass}`}>
+                  <input
+                    type="checkbox"
+                    checked={trustEmbeddedRegex}
+                    onChange={(event) => setTrustEmbeddedRegex(event.target.checked)}
+                    className="h-4 w-4 rounded border-[#534741] bg-[#1a1816] text-amber-500 focus:ring-amber-500/40"
+                  />
+                  <span>{t("importCharacterModal.enableEmbeddedRegex")}</span>
+                </label>
               )}
               
               <div className="flex justify-end space-x-3">
@@ -177,7 +249,8 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
                 
                 <button
                   onClick={(e) => {trackButtonClick("ImportCharacterModal", "导入角色");handleUpload();}}
-                  className={`px-4 py-2 bg-[#252220] hover:bg-[#3a2a2a] border border-[#534741] rounded-md text-[#f9c86d] transition-colors ${fontClass} ${(!selectedFile || isUploading) ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={!selectedFile || !protagonistName.trim() || isUploading}
+                  className={`px-4 py-2 bg-[#252220] hover:bg-[#3a2a2a] border border-[#534741] rounded-md text-[#f9c86d] transition-colors ${fontClass} ${(!selectedFile || !protagonistName.trim() || isUploading) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {isUploading ? (
                     <div className="flex items-center">

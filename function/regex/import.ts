@@ -1,6 +1,7 @@
 import { RegexScriptOperations } from "@/lib/data/regex-script-operation";
 import { RegexScript } from "@/lib/models/regex-script-model";
 import { v4 as uuidv4 } from "uuid";
+import { normalizeRegexScript } from "@/lib/character-card/normalize";
 
 export interface ImportRegexScriptResult {
   success: boolean;
@@ -44,17 +45,8 @@ export async function importRegexScriptFromJson(
     const scripts = await RegexScriptOperations.getRegexScripts(characterId) || {};
     const now = Date.now();
     
-    let scriptEntries: any[] = [];
-    
-    if (Array.isArray(jsonData)) {
-      scriptEntries = jsonData;
-    } else if (jsonData.scripts && Array.isArray(jsonData.scripts)) {
-      scriptEntries = jsonData.scripts;
-    } else if (jsonData.regexScripts && Array.isArray(jsonData.regexScripts)) {
-      scriptEntries = jsonData.regexScripts;
-    } else if (typeof jsonData === "object" && !Array.isArray(jsonData) && jsonData.findRegex) {
-      scriptEntries = [jsonData];
-    } else {
+    const scriptEntries = extractRegexScriptEntries(jsonData);
+    if (!scriptEntries) {
       result.errors.push("Unsupported JSON format");
       result.message = "Unsupported JSON format";
       return result;
@@ -66,21 +58,17 @@ export async function importRegexScriptFromJson(
       try {
         const scriptId = `script_${uuidv4()}`;
         
-        if (!scriptData.findRegex || typeof scriptData.findRegex !== "string") {
+        const normalized = normalizeRegexScript(scriptData, 0);
+        if (!normalized) {
           result.skippedCount++;
-          result.errors.push("Skipped script: missing or invalid findRegex");
+          result.errors.push("Skipped script: invalid structure");
           continue;
         }
-
         const regexScript: RegexScript = {
+          ...normalized,
           scriptKey: scriptId,
-          scriptName: scriptData.scriptName || scriptData.id || "Imported Script",
-          findRegex: scriptData.findRegex,
-          replaceString: scriptData.replaceString,
-          trimStrings: Array.isArray(scriptData.trimStrings) ? scriptData.trimStrings : [],
-          placement: Array.isArray(scriptData.placement) ? scriptData.placement : [scriptData.placement || 999],
-          disabled: scriptData.disabled === true,
           extensions: {
+            ...normalized.extensions,
             imported: true,
             importedAt: now,
           },
@@ -166,88 +154,35 @@ export async function importRegexScriptFromJson(
 }
 
 export function validateRegexScriptJson(jsonData: any): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
   if (!jsonData) {
-    errors.push("Invalid JSON: Data is null or undefined");
-    return { valid: false, errors };
+    return { valid: false, errors: ["Invalid JSON: Data is null or undefined"] };
   }
-
-  if (typeof jsonData === "object" && !Array.isArray(jsonData) && jsonData.findRegex) {
-    return { valid: true, errors: [] };
+  const scripts = extractRegexScriptEntries(jsonData);
+  if (!scripts || scripts.length === 0) {
+    return { valid: false, errors: ["No regex scripts found"] };
   }
+  return scripts.some(isRegexScript)
+    ? { valid: true, errors: [] }
+    : { valid: false, errors: ["No valid scripts found with findRegex"] };
+}
 
-  if (Array.isArray(jsonData)) {
-    if (jsonData.length === 0) {
-      errors.push("Empty array provided");
-      return { valid: false, errors };
-    }
+function isRegexScript(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const script = value as Record<string, unknown>;
+  const expression = script.findRegex ?? script.find_regex;
+  return typeof expression === "string" && expression.length > 0;
+}
 
-    let hasValidScript = false;
-    for (const script of jsonData) {
-      if (typeof script === "object" && script !== null && script.findRegex) {
-        hasValidScript = true;
-        break;
-      }
-    }
-
-    if (!hasValidScript) {
-      errors.push("No valid scripts found with findRegex");
-      return { valid: false, errors };
-    }
-
-    return { valid: true, errors: [] };
+function extractRegexScriptEntries(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return null;
+  if (isRegexScript(value)) return [value];
+  const source = value as Record<string, unknown>;
+  for (const key of ["scripts", "regexScripts", "regex_scripts"]) {
+    const candidate = source[key];
+    if (Array.isArray(candidate)) return candidate;
+    if (candidate && typeof candidate === "object") return Object.values(candidate);
   }
-
-  if (typeof jsonData !== "object") {
-    errors.push("Invalid JSON: Root must be an object or array");
-    return { valid: false, errors };
-  }
-
-  if (jsonData.scripts && Array.isArray(jsonData.scripts)) {
-    if (jsonData.scripts.length === 0) {
-      errors.push("No scripts found in scripts array");
-      return { valid: false, errors };
-    }
-    
-    let hasValidScript = false;
-    for (const script of jsonData.scripts) {
-      if (typeof script === "object" && script !== null && script.findRegex) {
-        hasValidScript = true;
-        break;
-      }
-    }
-
-    if (!hasValidScript) {
-      errors.push("No valid scripts found with findRegex");
-      return { valid: false, errors };
-    }
-
-    return { valid: true, errors: [] };
-  }
-
-  if (jsonData.regexScripts && Array.isArray(jsonData.regexScripts)) {
-    if (jsonData.regexScripts.length === 0) {
-      errors.push("No scripts found in regexScripts array");
-      return { valid: false, errors };
-    }
-    
-    let hasValidScript = false;
-    for (const script of jsonData.regexScripts) {
-      if (typeof script === "object" && script !== null && script.findRegex) {
-        hasValidScript = true;
-        break;
-      }
-    }
-
-    if (!hasValidScript) {
-      errors.push("No valid scripts found with findRegex");
-      return { valid: false, errors };
-    }
-
-    return { valid: true, errors: [] };
-  }
-
-  errors.push("Unsupported JSON format: Expected array or object with scripts/regexScripts array");
-  return { valid: false, errors };
-} 
+  const directEntries = Object.values(source);
+  return directEntries.some(isRegexScript) ? directEntries : null;
+}

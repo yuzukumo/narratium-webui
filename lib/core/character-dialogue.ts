@@ -1,24 +1,21 @@
 import { Character } from "@/lib/core/character";
 import { PromptAssembler } from "@/lib/core/prompt-assembler";
 import { PromptType } from "@/lib/models/character-prompts-model";
-import { getCharacterCompressorPromptZh, getCharacterCompressorPromptEn } from "@/lib/prompts/character-prompts";
+import { getCharacterCompressorPrompt } from "@/lib/prompts/character-prompts";
 import { CharacterHistory } from "@/lib/core/character-history";
 import { DialogueOptions } from "@/lib/models/character-dialogue-model";
-import { DEFAULT_RESPONSE_LENGTH, ApiProvider } from "@/utils/api-config";
+import { DEFAULT_RESPONSE_LENGTH } from "@/utils/api-config";
 import { invokeLLM } from "@/utils/llm-api";
+import type { Language } from "@/lib/i18n/languages";
 
 export class CharacterDialogue {
   character: Character;
   history: CharacterHistory;
   llm: {
-    modelName: string;
-    apiKey: string;
-    baseUrl: string;
-    llmType: ApiProvider;
+    modelId: string;
     temperature: number;
-    reasoningEffort?: DialogueOptions["reasoningEffort"];
   } | null;
-  language: "zh" | "en" = "zh";
+  language: Language = "zh";
   promptType: PromptType = PromptType.COMPANION;
   promptAssembler: PromptAssembler;
 
@@ -61,16 +58,11 @@ export class CharacterDialogue {
       return;
     }
     const {
-      modelName,
-      apiKey,
-      baseUrl,
-      llmType = "openai",
-      reasoningEffort,
+      modelId,
       temperature = 0.7,
     } = options;
 
-    const safeModel = modelName && modelName.trim() ? modelName.trim() : "";
-    const safeApiKey = apiKey && apiKey.trim() ? apiKey.trim() : "";
+    const safeModelID = modelId && modelId.trim() ? modelId.trim() : "";
 
     type LLMSettings = {
       temperature: number;
@@ -109,17 +101,13 @@ export class CharacterDialogue {
       console.warn("Failed to load LLM settings from localStorage, using defaults", error);
     }
 
-    if (!safeModel || !safeApiKey) {
-      throw new Error("OpenAI model or API key is missing.");
+    if (!safeModelID) {
+      throw new Error("A model must be selected.");
     }
 
     this.llm = {
-      modelName: safeModel,
-      apiKey: safeApiKey,
-      baseUrl,
-      llmType,
+      modelId: safeModelID,
       temperature: llmSettings.temperature,
-      reasoningEffort,
     };
   }
   
@@ -129,23 +117,14 @@ export class CharacterDialogue {
     }
     
     try {
-      let userPrompt;
-      if (this.language === "zh") {
-        userPrompt = getCharacterCompressorPromptZh(userInput, story);
-      } else {
-        userPrompt = getCharacterCompressorPromptEn(userInput, story);
-      }
+      const userPrompt = getCharacterCompressorPrompt(userInput, story);
 
       const compressedStory = await invokeLLM({
-        provider: this.llm.llmType,
-        baseUrl: this.llm.baseUrl,
-        apiKey: this.llm.apiKey,
-        model: this.llm.modelName,
+        modelId: this.llm.modelId,
         systemMessage: "",
         userMessage: userPrompt,
         maxTokens: DEFAULT_RESPONSE_LENGTH,
         temperature: this.llm.temperature,
-        reasoningEffort: this.llm.reasoningEffort,
       });
 
       return compressedStory.text;

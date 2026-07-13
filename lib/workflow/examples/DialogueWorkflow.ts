@@ -8,19 +8,16 @@ import { LLMNode } from "@/lib/nodeflow/LLMNode/LLMNode";
 import { RegexNode } from "@/lib/nodeflow/RegexNode/RegexNode";
 import { OutputNode } from "@/lib/nodeflow/OutputNode/OutputNode";
 import { PromptType } from "@/lib/models/character-prompts-model";
-import { ApiProvider, ReasoningEffort } from "@/utils/api-config";
+import type { Language } from "@/lib/i18n/languages";
 
 export interface DialogueWorkflowParams {
   characterId: string;
   userInput: string;
   number?: number;
   promptType?: PromptType;
-  language?: "zh" | "en";
-  username?: string;
-  modelName: string;
-  apiKey: string;
-  baseUrl?: string;
-  llmType?: ApiProvider;
+  language?: Language;
+  protagonistName?: string;
+  modelId: string;
   temperature?: number;
   maxTokens?: number;
   maxRetries?: number;
@@ -29,10 +26,6 @@ export interface DialogueWorkflowParams {
   presencePenalty?: number;
   topK?: number;
   repeatPenalty?: number;
-  streaming?: boolean;
-  streamUsage?: boolean;
-  fastModel?: boolean;
-  reasoningEffort?: ReasoningEffort;
 }
 
 export class DialogueWorkflow extends BaseWorkflow {
@@ -72,9 +65,9 @@ export class DialogueWorkflow extends BaseWorkflow {
           name: "userInput",
           category: NodeCategory.ENTRY,
           next: ["preset-1"],
-          initParams: ["characterId", "userInput", "number", "promptType", "language", "username", "modelName", "apiKey", "baseUrl", "llmType", "temperature", "fastModel", "reasoningEffort"],
+		  initParams: ["characterId", "userInput", "number", "promptType", "language", "protagonistName", "modelId", "temperature"],
           inputFields: [],
-          outputFields: ["characterId", "userInput", "number", "promptType", "language", "username", "modelName", "apiKey", "baseUrl", "llmType", "temperature", "fastModel", "reasoningEffort"],
+		  outputFields: ["characterId", "userInput", "number", "promptType", "language", "protagonistName", "modelId", "temperature"],
         },
         {
           id: "preset-1",
@@ -82,8 +75,8 @@ export class DialogueWorkflow extends BaseWorkflow {
           category: NodeCategory.MIDDLE,
           next: ["context-1"],
           initParams: [],
-          inputFields: ["characterId", "language", "username", "number", "fastModel"],
-          outputFields: ["systemMessage", "userMessage", "presetId", "characterId", "language", "username"],
+		  inputFields: ["characterId", "language", "number"],
+          outputFields: ["systemMessage", "userMessage", "presetId", "characterId", "language", "protagonistName", "characterName"],
         },
         {
           id: "context-1",
@@ -100,8 +93,8 @@ export class DialogueWorkflow extends BaseWorkflow {
           category: NodeCategory.MIDDLE,
           next: ["llm-1"],
           initParams: [],
-          inputFields: ["systemMessage", "userMessage", "characterId", "language", "username", "userInput"],
-          outputFields: ["systemMessage", "userMessage"],
+          inputFields: ["systemMessage", "userMessage", "characterId", "language", "protagonistName", "characterName", "userInput"],
+          outputFields: ["systemMessage", "userMessage", "protagonistName", "characterName"],
           inputMapping: {
             "userInput": "currentUserInput",
           },
@@ -112,7 +105,7 @@ export class DialogueWorkflow extends BaseWorkflow {
           category: NodeCategory.MIDDLE,
           next: ["regex-1"],
           initParams: [],
-          inputFields: ["systemMessage", "userMessage", "modelName", "apiKey", "baseUrl", "llmType", "temperature", "language", "reasoningEffort", "number"],
+          inputFields: ["systemMessage", "userMessage", "modelId", "temperature", "language", "number"],
           outputFields: ["llmResponse", "responseUsage"],
         },
         {
@@ -121,7 +114,7 @@ export class DialogueWorkflow extends BaseWorkflow {
           category: NodeCategory.MIDDLE,
           next: ["output-1"],
           initParams: [],
-          inputFields: ["llmResponse", "characterId", "responseUsage"],
+          inputFields: ["llmResponse", "characterId", "responseUsage", "protagonistName", "characterName"],
           outputFields: ["replacedText", "screenContent", "fullResponse", "nextPrompts", "event", "responseUsage"],
         },
         {

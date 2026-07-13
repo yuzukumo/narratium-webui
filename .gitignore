@@ -67,13 +67,10 @@ yarn-error.log*
 *.seed
 *.stackdump
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 .env
 *.local
-!.env.example
-!.env.sample
-!.env.template
 
 # vercel
 .vercel
@@ -84,6 +81,7 @@ next-env.d.ts
 
 # resources
 /resources
+/claude-code-sourcemap
 
 # local docker overrides
 compose.override.yml
@@ -93,3 +91,4 @@ docker-compose.override.yml
 
 # test
 /test
+/Where_Stars_Are_Tombs_2.3.png

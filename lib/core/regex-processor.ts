@@ -1,150 +1,144 @@
-import { RegexReplacementResult } from "@/lib/models/regex-script-model";
+import {
+  RegexPlacement,
+  RegexReplacementResult,
+  RegexScript,
+} from "@/lib/models/regex-script-model";
 import { RegexScriptOperations } from "@/lib/data/regex-script-operation";
 
 export interface RegexProcessorOptions {
   ownerId: string;
+  placement?: RegexPlacement;
+  isMarkdown?: boolean;
+  isPrompt?: boolean;
+  isEdit?: boolean;
+  depth?: number;
+  protagonistName?: string;
+  charName?: string;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function substituteMacros(
+  value: string,
+  options: RegexProcessorOptions,
+  escaped: boolean,
+): string {
+  const replacements: Record<string, string> = {
+    user: options.protagonistName || "",
+    char: options.charName || "",
+  };
+  return value.replace(/{{(user|char)}}/gi, (_match, key: string) => {
+    const replacement = replacements[key.toLowerCase()] || "";
+    return escaped ? escapeRegex(replacement) : replacement;
+  });
+}
+
+function compileRegex(value: string): RegExp | null {
+  const literal = value.match(/^\/([\s\S]*)\/([dgimsuvy]*)$/);
+  try {
+    return literal ? new RegExp(literal[1], literal[2]) : new RegExp(value, "g");
+  } catch {
+    return null;
+  }
+}
+
+function replacementForMatch(
+  script: RegexScript,
+  match: string,
+  captures: unknown[],
+  groups: Record<string, string> | undefined,
+  options: RegexProcessorOptions,
+): string {
+  const trimStrings = script.trimStrings.map((item) => substituteMacros(item, options, false));
+  const clean = (value: unknown) => {
+    let result = typeof value === "string" ? value : "";
+    for (const trimString of trimStrings) {
+      result = result.split(trimString).join("");
+    }
+    return result;
+  };
+  const template = substituteMacros(script.replaceString || "", options, false)
+    .replace(/{{match}}/gi, "$0");
+  return template
+    .replace(/\$<([^>]+)>/g, (_token, name: string) => clean(groups?.[name]))
+    .replace(/\$(\d+)|\$&/g, (token, index: string | undefined) => (
+      token === "$&" || index === "0" ? clean(match) : clean(captures[Number(index) - 1])
+    ));
 }
 
 export class RegexProcessor {
-  private static handleEscapeSequences(pattern: string): string {
-    const escapeSequences = ["\\t", "\\n", "\\r", "\\f", "\\v", "\\b", "\\0"];
-    
-    let modifiedPattern = pattern;
-    let hasEscapeSequence = false;
-    
-    for (const seq of escapeSequences) {
-      if (pattern.includes(seq)) {
-        const escapedSeq = seq.replace("\\", "\\\\");
-        modifiedPattern = modifiedPattern.replace(new RegExp(seq.replace("\\", "\\\\"), "g"), escapedSeq);
-        hasEscapeSequence = true;
-      }
-    }
-    
-    if (hasEscapeSequence) {
-      console.log(`[RegexProcessor] Escaped potential control sequences in pattern: '${pattern}' → '${modifiedPattern}'`);
-    }
-    
-    return modifiedPattern;
+  static applyScript(
+    input: string,
+    script: RegexScript,
+    options: RegexProcessorOptions,
+  ): string {
+    const substitutionMode = Number(script.substituteRegex || 0);
+    const pattern = substitutionMode === 0
+      ? script.findRegex
+      : substituteMacros(script.findRegex, options, substitutionMode === 2);
+    const expression = compileRegex(pattern);
+    if (!expression) return input;
+    expression.lastIndex = 0;
+    return input.replace(expression, (...args: unknown[]) => {
+      const match = String(args[0]);
+      const possibleGroups = args.at(-1);
+      const hasGroups = possibleGroups && typeof possibleGroups === "object";
+      const capturesEnd = hasGroups ? args.length - 3 : args.length - 2;
+      return replacementForMatch(
+        script,
+        match,
+        args.slice(1, capturesEnd),
+        hasGroups ? possibleGroups as Record<string, string> : undefined,
+        options,
+      );
+    });
   }
 
   static async processFullContext(
     fullContext: string,
     options: RegexProcessorOptions,
   ): Promise<RegexReplacementResult> {
-    const {
-      ownerId,
-    } = options;
-
-    const allScripts = await RegexScriptOperations.getAllScriptsForProcessing(ownerId);
-    
     const result: RegexReplacementResult = {
       originalText: fullContext,
       replacedText: fullContext,
       appliedScripts: [],
       success: false,
     };
-    
-    const settings = await RegexScriptOperations.getRegexScriptSettings(ownerId);
-    if (!settings.enabled) {
+    const settings = await RegexScriptOperations.getRegexScriptSettings(options.ownerId);
+    if (
+      !settings.enabled
+      || (options.isPrompt === true && !settings.applyToPrompt)
+      || (options.isPrompt !== true && !settings.applyToResponse)
+    ) {
       return result;
     }
 
-    const enabledScripts = allScripts
-      .filter(script => {
-        const isDefaultDisabled = script.findRegex === "/[\\s\\S]*/gm" && script.replaceString === "";
-        return !script.disabled && !isDefaultDisabled;
-      })
-      .sort((a, b) => {
-        const aPos = a.placement && a.placement.length > 0 ? a.placement[0] : 999;
-        const bPos = b.placement && b.placement.length > 0 ? b.placement[0] : 999;
-        return aPos - bPos;
-      });
-    
-    let processedText = fullContext;
-    
-    for (const script of enabledScripts) {
-      try {
-        let regexPattern = script.findRegex;
-        
-        if (regexPattern) {
-          regexPattern = RegexProcessor.handleEscapeSequences(regexPattern);
-          
-          const regexFormatMatch = regexPattern.match(/^\/(.*)\/(g|i|m|gi|gm|im|gim)?$/);
-          
-          if (regexFormatMatch) {
-            try {
-              let pattern = regexFormatMatch[1];
-              const flags = regexFormatMatch[2] || "g";
-              
-              pattern = RegexProcessor.handleEscapeSequences(pattern);
+    const placement = options.placement ?? RegexPlacement.AI_OUTPUT;
+    const scripts = await RegexScriptOperations.getAllScriptsForProcessing(options.ownerId);
+    let processed = fullContext;
+    for (const script of scripts) {
+      if (script.disabled || !script.findRegex) continue;
+      if (!script.placement.includes(placement) && !script.placement.includes(999)) continue;
+      if (options.isEdit && script.runOnEdit === false) continue;
+      if (typeof options.depth === "number") {
+        if (typeof script.minDepth === "number" && options.depth < script.minDepth) continue;
+        if (typeof script.maxDepth === "number" && options.depth > script.maxDepth) continue;
+      }
+      // Unrestricted scripts run in both prompt and display contexts. The
+      // flags narrow a script's scope; they do not opt it into a context.
+      if (script.markdownOnly === true && options.isMarkdown !== true) continue;
+      if (script.promptOnly === true && options.isPrompt !== true) continue;
 
-              const regex = new RegExp(pattern, flags);
-              const prevText = processedText;
-              processedText = processedText.replace(regex, script.replaceString as string);
-              
-              if (prevText !== processedText) {
-                result.appliedScripts.push(script.scriptKey);
-                result.success = true;
-              }
-              
-              continue;
-            } catch (e) {
-              console.warn(`格式化的正则表达式处理失败: ${regexPattern}`, e);
-            }
-          }
-
-          let regex: RegExp;
-          try {
-            regex = new RegExp(regexPattern, "g");
-          } catch (e) {
-            let safePattern = regexPattern;
-            
-            if (safePattern.endsWith("\\")) {
-              safePattern = safePattern.slice(0, -1);
-            }
-            const formatMatch = safePattern.match(/^\/(.*)\/(g|i|m|gi|gm|im|gim)?$/);
-            if (formatMatch) {
-              safePattern = formatMatch[1];
-            }
-            
-            try {
-              regex = new RegExp(safePattern, "g");
-              console.warn(`[RegexScript] 自动修正非法正则: '${regexPattern}' → '${safePattern}'`);
-            } catch (e2) {
-              try {
-                const literalPattern = regexPattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
-                regex = new RegExp(literalPattern, "g");
-                console.warn(`[RegexScript] 将模式转为字面量: '${regexPattern}' → '${literalPattern}'`);
-              } catch (e3) {
-                console.warn(`RegexScript 执行失败，跳过非法模式: '${regexPattern}'`);
-                continue;
-              }
-            }
-          }
-
-          const prevText = processedText;
-          processedText = processedText.replace(regex, script.replaceString as string);
-          
-          if (prevText !== processedText) {
-            result.appliedScripts.push(script.scriptKey);
-            result.success = true;
-          }
-        }
-      } catch (error: unknown) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.warn(`Error applying regex script ${script.id || "unknown"}: ${errorMsg}`, {
-          pattern: script.findRegex,
-          replace: script.replaceString,
-        });
+      const next = this.applyScript(processed, script, options);
+      if (next !== processed) {
+        processed = next;
+        result.appliedScripts.push(script.scriptKey);
       }
     }
-    
-    result.replacedText = processedText;
-    
-    if (result.appliedScripts.length > 0) {
-      console.log(`[RegexProcessor] 已应用的脚本ID: ${result.appliedScripts.join(", ")}`);
-    }
-    
+    result.replacedText = processed;
+    result.success = result.appliedScripts.length > 0;
     return result;
   }
 }

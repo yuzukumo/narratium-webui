@@ -5,16 +5,274 @@
     "close": "Close",
     "return": "Return",
     "settings": "Settings",
-    "switchToEnglish": "Switch to English",
-    "switchToChinese": "Switch to Chinese",
     "soundOn": "Sound On",
     "soundOff": "Sound Off",
-    "saving": "Saving...",
-    "defaultAutoFillFileName": "Default: Auto-fill from file name",
-    "exportData": "Export Data",
-    "importData": "Import Data",
-    "exportFailed": "Export failed, please try again",
-    "importFailed": "Import failed, please try again"
+    "saving": "Saving..."
+  },
+  "userMenu": {
+    "openMenu": "Open account menu",
+    "menuLabel": "Account menu",
+    "settings": "Settings",
+    "adminPanel": "Admin Panel",
+    "signOut": "Sign out"
+  },
+  "settings": {
+    "title": "Settings",
+    "close": "Close settings",
+    "tabs": {
+      "label": "Settings sections",
+      "general": "General",
+      "usage": "Usage logs"
+    },
+    "general": {
+      "language": "Language",
+      "sound": "Interface sounds",
+      "soundOn": "On",
+      "soundOff": "Off", "avatarUpload": "Upload avatar", "avatarUploading": "Uploading...", "avatarHint": "PNG, JPEG, WebP or GIF, up to 4 MB", "avatarInvalid": "Choose an image no larger than 4 MB.", "avatarSaved": "Avatar updated", "avatarError": "Unable to update avatar.", "availableBalance": "Available quota", "refreshBalance": "Refresh quota", "name": "Display name", "editName": "Edit display name", "saveName": "Save display name", "nameSaved": "Display name updated", "nameError": "Unable to update display name."
+    },
+    "usage": {
+      "title": "Usage logs", "description": "Model requests and billed usage for this account.",
+      "refresh": "Refresh usage logs", "loadError": "Unable to load usage logs.", "empty": "No usage records yet.", "loadMore": "Load more",
+      "character": "Character", "unknownCharacter": "Unknown character", "model": "Model", "input": "Input", "output": "Output", "reasoning": "Reasoning",
+      "cacheRead": "Cache read", "cacheWrite": "Cache write", "latency": "Latency", "firstToken": "First", "totalTime": "Total", "cost": "Cost", "time": "Time"
+    }
+  },
+  "notifications": {
+    "signOutSuccess": "Signed out",
+    "signOutError": "Unable to sign out. Please try again.",
+    "soundEnabled": "Sound setting saved: on",
+    "soundDisabled": "Sound setting saved: off",
+    "languageSaved": "Language preference saved",
+    "modelSelectedNextRequest": "Model switched and will apply to the next request",
+    "responseLengthSaved": "Response length preference saved"
+  },
+  "preferences": {
+    "unavailable": "Preferences unavailable",
+    "loadError": "Unable to load preferences.",
+    "retry": "Retry",
+    "syncing": "Syncing preferences"
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "loading": "Loading administration data...",
+    "actions": {
+      "back": "Back",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "tabs": {
+      "label": "Admin panel sections",
+      "channels": "Channels",
+	  "models": "Models",
+      "users": "Users"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "channels": {
+      "title": "Channels",
+      "new": "New channel",
+      "countLabel": "Channel count",
+      "deleteConfirm": "Delete this channel and all of its models?",
+      "empty": "No channels configured",
+      "types": {
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+        "gemini": "Gemini"
+      },
+      "apiFormats": {
+        "responses": "Responses",
+        "chatCompletions": "Chat Completions",
+        "messages": "Messages",
+        "generateContent": "Generate Content"
+      },
+      "columns": {
+        "name": "Name",
+        "type": "Type",
+        "models": "Models",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "actions": {
+        "edit": "Edit channel",
+        "delete": "Delete channel",
+        "enable": "Enable channel",
+        "disable": "Disable channel"
+      },
+      "drawer": {
+        "close": "Close channel editor",
+        "createTitle": "New channel",
+        "editTitle": "Edit channel",
+        "newSubtitle": "Configure an upstream model API"
+      },
+      "form": {
+        "name": "Channel name",
+        "namePlaceholder": "Production OpenAI",
+        "type": "Channel type",
+        "apiFormat": "API format",
+        "promptCacheKey": "Send prompt cache key",
+        "baseUrl": "Base URL",
+        "baseUrlPlaceholder": "https://api.example.com",
+        "apiKey": "API key",
+        "apiKeyPlaceholder": "Enter the channel API key",
+        "apiKeyKeepPlaceholder": "Leave blank to keep the current key",
+        "models": "Model IDs",
+        "modelPlaceholder": "Enter a model ID",
+        "addModel": "Add model",
+        "removeModel": "Remove model",
+        "modelsRequired": "Add at least one model ID"
+      }
+    },
+	"models": {
+	  "title": "Models",
+	  "countLabel": "Model count",
+	  "empty": "No models configured. Add model IDs to a channel first.",
+	  "reasoningDisabled": "Off",
+	  "compactionShort": "Compact",
+	  "columns": {
+		"model": "Model ID",
+		"channel": "Channel",
+		"context": "Context window",
+		"output": "Max output",
+		"pricing": "Pricing",
+		"reasoning": "Reasoning",
+		"actions": "Actions"
+	  },
+	  "pricingShort": {
+		"input": "In",
+		"output": "Out"
+	  },
+	  "actions": {
+		"edit": "Edit model"
+	  },
+	  "drawer": {
+		"title": "Edit model",
+		"close": "Close model editor"
+	  },
+	  "form": {
+		"contextWindow": "Context window",
+		"compactionThreshold": "Compaction threshold",
+		"maxOutputTokens": "Maximum output tokens",
+        "pricing": "Model pricing",
+		"inputPrice": "Input",
+		"outputPrice": "Output",
+		"cacheReadPrice": "Cache read",
+		"cacheCreationPrice": "Cache write",
+        "pricePerMillion": "/1M",
+		"multiplier": "Ratio",
+		"reasoning": "Enable reasoning",
+		"effort": "effort",
+		"customEffort": "Custom",
+		"customEffortPlaceholder": "Enter an effort accepted by the upstream API",
+		"invalid": "Check the context, output, pricing, and reasoning settings."
+	  }
+	},
+    "users": {
+      "title": "Users",
+      "countLabel": "User count",
+      "currentAccount": "Current account",
+      "empty": "No users found",
+      "registrationEnabled": "Allow new registrations",
+      "emailVerificationEnabled": "Require email verification",
+      "roleLabel": "Role",
+      "statusLabel": "Status",
+      "columns": {
+        "name": "Name",
+        "role": "Role",
+        "status": "Status",
+		"balance": "Remaining quota",
+		"createdAt": "Created",
+		"actions": "Actions"
+      },
+      "roles": {
+        "user": "User",
+        "admin": "Administrator"
+      },
+      "statuses": {
+        "active": "Active",
+        "disabled": "Disabled"
+	  },
+	  "actions": {
+		"edit": "Edit user"
+	  },
+	  "drawer": {
+		"title": "Edit user",
+		"close": "Close user editor"
+	  },
+		"sections": {
+			"profile": "Account",
+			"balance": "Quota",
+			"ledger": "Recent quota activity",
+		"password": "Reset password"
+	  },
+	  "form": {
+		"name": "Name",
+		"email": "Email",
+		"amountUSD": "Amount",
+		"note": "Note",
+		"newPassword": "New password",
+		"resetPassword": "Reset password",
+		"passwordTooLong": "Password cannot exceed 72 UTF-8 bytes.",
+		"invalidAmount": "Enter a non-negative amount with up to 6 decimal places; add and subtract must be greater than zero."
+	  },
+			"balance": {
+			"total": "Quota",
+			"current": "Current quota",
+		"reserved": "Reserved",
+		"available": "Available",
+		"add": "Add",
+			"subtract": "Subtract",
+			"override": "Override",
+			"apply": "Adjust quota",
+		"noLedger": "No quota activity",
+		"kinds": {
+			"adjustment": "Quota adjustment",
+			"quota_add": "Quota increased",
+			"quota_subtract": "Quota decreased",
+			"quota_override": "Quota overwritten",
+		  "usage_charge": "Model usage"
+		}
+      }
+    },
+    "errors": {
+      "load": "Unable to load administration data.",
+      "channelSave": "Unable to save the channel.",
+      "channelDelete": "Unable to delete the channel.",
+      "channelStatusUpdate": "Unable to update the channel status.",
+	  "modelSave": "Unable to save the model.",
+      "userUpdate": "Unable to update the user.",
+      "lastAdmin": "The last active administrator cannot be demoted or disabled.",
+      "registrationUpdate": "Unable to update registration settings."
+    },
+    "toasts": {
+      "channelCreateSuccess": "Channel created",
+      "channelUpdateSuccess": "Channel updated",
+      "channelSaveError": "Unable to save channel",
+      "channelDeleteSuccess": "Channel deleted",
+      "channelDeleteError": "Unable to delete channel",
+      "channelEnabledSuccess": "Channel enabled",
+      "channelDisabledSuccess": "Channel disabled",
+      "channelStatusUpdateError": "Unable to update channel status",
+	  "modelUpdateSuccess": "Model updated",
+	  "modelSaveError": "Unable to save model",
+      "userRoleSuccess": "User role updated",
+      "userStatusSuccess": "User status updated",
+      "userUpdateError": "Unable to update user",
+	  "userUpdateSuccess": "User updated",
+	  "passwordResetSuccess": "Password reset",
+	  "passwordResetError": "Unable to reset password",
+		  "balanceAdjustedSuccess": "Quota adjusted successfully",
+		  "balanceAdjustmentError": "Unable to adjust quota",
+		  "ledgerLoadError": "Unable to load quota activity",
+      "lastAdminError": "At least one active administrator is required",
+      "registrationEnabledSuccess": "Registration enabled",
+      "registrationDisabledSuccess": "Registration disabled",
+      "emailVerificationEnabledSuccess": "Email verification enabled",
+      "emailVerificationDisabledSuccess": "Email verification disabled",
+      "registrationUpdateError": "Unable to update registration settings"
+    }
   },
   "sidebar": {
     "home": "Home",
@@ -116,10 +374,28 @@
     "immediatelyStart": "Immediately Start"
   },
   "auth": {
-    "username": "Username",
+    "name": "Name",
+    "email": "Email address",
+    "emailRequired": "Enter an email address.",
+    "verificationCode": "Verification code",
+    "sendCode": "Send code",
+    "verificationCodeSent": "A verification code was sent to the email address.",
     "password": "Password",
     "login": "Login",
     "register": "Register",
+    "createFirstAdministrator": "Create the first administrator account",
+    "signInToContinue": "Sign in to continue",
+    "signIn": "Sign in",
+    "createAccount": "Create account",
+    "bootstrapSecret": "Bootstrap secret",
+    "confirmPassword": "Confirm password",
+    "passwordsDoNotMatch": "Passwords do not match.",
+    "unableToReachServer": "Unable to reach the server.",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "showBootstrapSecret": "Show bootstrap secret",
+    "hideBootstrapSecret": "Hide bootstrap secret",
+    "pleaseWait": "Please wait",
     "welcomeBack": "Welcome Back",
     "continueJourney": "Sign in to continue your journey",
     "emailPlaceholder": "Enter your name",
@@ -188,6 +464,7 @@
     "initializeFailed": "Game initialization failed",
     "setupFailed": "Game setup failed",
     "cannotReadResponseStream": "Cannot read response stream",
+    "insufficientQuota": "Insufficient quota. Contact an administrator to increase your quota.",
     "generatingStory": "Generating story...",
     "actionFailed": "Action failed",
     "confirmDelete": "Are you sure you want to delete this story? This action cannot be undone.",
@@ -236,7 +513,7 @@
     "delete": "Delete",
     "edit": "Edit",
     "chat": "Chat",
-    "recentlyCreated": "Recently Created"
+    "recentlyCreated": "Recently Created", "lastUsed": "Last used"
   },
   "editCharacterModal": {
     "title": "Edit Character",
@@ -252,16 +529,29 @@
   },
   "importCharacterModal": {
     "title": "Import Character",
-    "description": "Select or drag and drop a SillyTavern PNG character card file to import",
+    "description": "Select or drag and drop a SillyTavern PNG, JSON, or CharX character card to import",
     "dragOrClick": "Drag file here or click to select",
-    "pngFormat": "Only SillyTavern PNG character card files are supported",
-    "pngOnly": "Please select a SillyTavern PNG file",
+    "pngFormat": "SillyTavern PNG, JSON, and CharX character card files are supported",
+    "pngOnly": "Please select a SillyTavern PNG, JSON, or CharX character card",
     "noFileSelected": "Please select a file first",
     "uploadFailed": "Upload failed, please try again",
+    "protagonistName": "Protagonist name",
+    "protagonistNamePlaceholder": "Name used for {{user}}",
+    "protagonistNameImmutable": "Set once for this character and cannot be changed later.",
+    "protagonistNameRequired": "Enter a protagonist name before importing",
+    "enableEmbeddedRegex": "Enable embedded regex scripts",
     "import": "Import",
     "uploading": "Uploading..."
   },
   "characterChat": {
+    "selectModel": "Select model",
+    "modelPrice": {
+      "input": "In",
+      "output": "Out",
+      "unit": "$/1M"
+    },
+    "modelsLoading": "Loading models...",
+    "noModels": "No models available",
     "navigation": "Navigation",
     "characterInfo": "Character Info",
     "actions": "Actions",
@@ -273,7 +563,12 @@
     "typeMessage": "Type a message...",
     "startConversation": "Start a conversation...",
     "send": "Send",
+    "stopGeneration": "Stop generation",
+    "scrollToBottom": "Scroll to bottom",
+    "contextUsage": "Context usage",
     "isTyping": "is typing...",
+    "expandSuggestions": "Expand suggestions",
+    "collapseSuggestions": "Collapse suggestions",
     "suggestedResponse1": "Tell me more",
     "suggestedResponse2": "What happened next?",
     "suggestedResponse3": "How do you feel about that?",
@@ -301,7 +596,8 @@
     "playerInput": "Player Input",
     "responseInstructions": "Response Instructions",
     "characterStatus": "Character Status",
-    "responseLength": "Model Response Length",
+    "responseLength": "Response Length Preference",
+    "responseLengthHint": "Approximate character target in the prompt (default {{default}}). Completeness comes first; this does not change the model output-token limit.",
     "customPrompt": "Custom Prompt",
     "customPromptFor": "Custom Prompts",
     "presets": "Presets",
@@ -333,15 +629,28 @@
     "enterTagName": "Enter tag name...",
     "add": "Add",
     "saveChanges": "Save Changes",
+    "saving": "Saving...",
+    "saveSuccess": "Saved",
+    "saveFailed": "Failed to save",
     "enterSymbol": "When entering a tag, it will match <tag>...</tag>",
-    "enableStreaming": "Enable Streaming",
-    "disableStreaming": "Disable Streaming",
     "jumpToMessage": "Jump to Message",
     "regenerateMessage": "Regenerate Message",
-    "enableFastModel": "Enable Fast Mode",
-    "disableFastModel": "Disable Fast Mode",
+    "editMessage": "Edit Message",
+    "alternativeReply": "Alternative replies",
+    "previousReply": "Previous reply",
+    "nextReply": "Next reply",
     "requestFailed": "Request Failed",
-    "errorRetryHint": "Use the regenerate button on this message to send the request again."
+	"errorRetryHint": "Use the regenerate button on this message to send the request again.",
+	"metrics": {
+	  "cost": "Cost",
+	  "input": "Input",
+	  "cacheCreation": "Cache write",
+	  "cacheRead": "Cache read",
+	  "output": "Output",
+	  "firstToken": "First token",
+	  "totalTime": "Total",
+	  "speed": "Speed"
+	}
   },
   "preset": {
     "title": "Preset Manager",
@@ -422,7 +731,11 @@
     "editPrompt": "Edit Prompt",
     "promptContent": "Prompt Content",
     "saving": "Saving",
-    "save": "Save"
+    "save": "Save",
+    "edit": "Edit",
+    "deletePreset": "Delete preset",
+    "promptUpdateSuccess": "Prompt updated successfully",
+    "promptUpdateFailed": "Failed to update prompt"
   },
   "importPreset": {
     "title": "Import Preset",
@@ -446,7 +759,8 @@
     "maxFileSize": "Maximum file size: 10MB",
     "selectJsonFile": "Please select a JSON file",
     "failedToImport": "Failed to import",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "save": "Save"
   },
   "worldBook": {
     "title": "World Book",
@@ -548,12 +862,17 @@
     "cancel": "Cancel",
     "saving": "Saving...",
     "positionOptions": {
-      "systemPromptStart": "System Prompt Start",
-      "afterSystemPrompt": "After System Prompt",
-      "userMessageStart": "User Message Start",
-      "afterResponseMode": "After Response Mode",
-      "basedOnDepth": "Based on Depth"
+      "systemPromptStart": "Before Character Definition",
+      "afterSystemPrompt": "After Character Definition",
+      "authorNoteTop": "Author's Note Top",
+      "authorNoteBottom": "Author's Note Bottom",
+      "basedOnDepth": "At Depth",
+      "examplesTop": "Examples Top",
+      "examplesBottom": "Examples Bottom",
+      "outlet": "Outlet"
     },
+    "outletName": "Outlet Name",
+    "outletNamePlaceholder": "Name used by {{outlet::name}}",
     "toggleFailed": "Toggle failed",
     "enableEntry": "Enable entry",
     "disableEntry": "Disable entry",
@@ -575,6 +894,11 @@
     "filterEnabled": "Enabled",
     "filterDisabled": "Disabled",
     "filterImported": "Global",
+    "filtered": "Filtered",
+    "filterConstant": "Constant",
+    "deleteGlobalWorldBook": "Delete global world book",
+    "globalWorldBookDeleted": "Global world book deleted",
+    "failedToDeleteGlobalWorldBook": "Failed to delete global world book",
     "filteredCount": "Filtered",
     "ascending": "Ascending",
     "descending": "Descending",
@@ -625,6 +949,8 @@
     "sortOrder": "Sort Order",
     "asc": "Ascending",
     "desc": "Descending",
+    "ascending": "Ascending",
+    "descending": "Descending",
     "filterBy": "Filter By",
     "filterAll": "All",
     "filterEnabled": "Enabled",
@@ -655,7 +981,10 @@
     "importErrors": "Import Errors",
     "noGlobalRegexScripts": "No global regex scripts available",
     "createGlobalRegexScriptFirst": "Create a global regex script first",
-    "selectGlobalRegexScript": "Select Global Regex Script"
+    "selectGlobalRegexScript": "Select Global Regex Script",
+    "deleteGlobalScript": "Delete global script",
+    "globalScriptDeleted": "Global script deleted",
+    "failedToDeleteGlobalScript": "Failed to delete global script"
   },
   "dialogue": {
     "treeVisualization": "Context Manager",
@@ -686,26 +1015,5 @@
     "enterToSend": "Press Enter to send, Shift + Enter for new line",
     "characterCount": "{count}/1000",
     "exampleStories": "Survival, Harry Potter, Lord of the Rings - any story at your will"
-  },
-  "tour": {
-    "welcome": "Welcome to Narratium",
-    "welcomeDescription": "Narratium is an intelligent character dialogue platform where you can have in-depth conversations with various AI characters and create unique story experiences. Let's explore the basic features.",
-    "loginTitle": "First, Login to Your Account",
-    "loginDescription": "Click here to login. Note: The username you enter may be used by AI characters as the protagonist's name, so we recommend using a name you'd like to use in stories.",
-    "settingsTitle": "Configure AI Model",
-    "settingsDescription": "After logging in, click the settings button in the top right corner to configure your AI model. You can choose OpenAI or Ollama and set the corresponding API keys and model parameters.",
-    "worldbookTitle": "World Book Feature",
-    "worldbookDescription": "World Book is used to define the character's background world, settings, and important information. AI will maintain character consistency based on the content in the World Book, making conversations more immersive.",
-    "regexTitle": "Regex Scripts",
-    "regexDescription": "Regex scripts allow you to customize the format and processing logic of AI replies. You can set special text replacement rules to make character expressions more unique.",
-    "presetTitle": "Preset Management",
-    "presetDescription": "Preset features let you save and manage different conversation settings, including character tone, style, and special instructions, making it easy to switch between different scenarios.",
-    "chatTitle": "Start Conversation",
-    "chatDescription": "Now you can enter messages in the input box and start exciting conversations with AI characters! AI will respond based on your World Book, regex scripts, and presets.",
-    "next": "Next",
-    "previous": "Previous",
-    "skip": "Skip",
-    "finish": "Finish",
-    "resetTour": "Reset Tour"
   }
 }

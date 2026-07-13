@@ -1,4 +1,5 @@
 import { LocalCharacterDialogueOperations } from "@/lib/data/character-dialogue-operation";
+import { processedDialogueView } from "@/function/dialogue/view";
 
 interface SwitchDialogueBranchOptions {
   characterId: string;
@@ -32,43 +33,7 @@ export async function switchDialogueBranch({ characterId, nodeId }: SwitchDialog
         )
         : [];
 
-    const messages = currentPath.flatMap((node) => {
-      const msgs = [];
-
-      if (node.user_input) {
-        msgs.push({
-          id: node.node_id,
-          role: "user",
-          content: node.user_input,
-          parsedContent: null,
-        });
-      }
-
-      if (node.assistant_response) {
-        msgs.push({
-          id: node.node_id,
-          role: "assistant",
-          content: node.assistant_response,
-          parsedContent: node.parsed_content || null,
-          node_id: node.node_id,
-        });
-      }
-
-      return msgs;
-    });
-
-    const processedDialogue = {
-      id: updatedDialogueTree.id,
-      character_id: updatedDialogueTree.character_id,
-      current_node_id: updatedDialogueTree.current_node_id,
-      created_at: updatedDialogueTree.created_at,
-      updated_at: updatedDialogueTree.updated_at,
-      messages,
-      tree: {
-        nodes: updatedDialogueTree.nodes,
-        currentNodeId: updatedDialogueTree.current_node_id,
-      },
-    };
+    const processedDialogue = processedDialogueView(updatedDialogueTree, currentPath);
 
     return {
       success: true,

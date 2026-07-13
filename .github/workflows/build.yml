@@ -1,194 +1,117 @@
-name: Build and Package
+name: Build and Test
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  contents: read
+  packages: write
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.11.0
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm peers check
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      TEST_DATABASE_URL: postgres://narratium:narratium_test_password@127.0.0.1:5432/narratium_test?sslmode=disable
+    services:
+      narratium-postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: narratium_test
+          POSTGRES_USER: narratium
+          POSTGRES_PASSWORD: narratium_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U narratium -d narratium_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go mod verify
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go build ./cmd/server
+
+  container:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: [frontend, backend]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         include:
-          - os: ubuntu-latest
-            artifact_name: Narratium-linux
-            asset_name: narratium-linux.tar.gz
-          - os: windows-latest
-            artifact_name: Narratium-windows
-            asset_name: narratium-windows.zip
-          - os: macos-latest
-            artifact_name: Narratium-macos
-            asset_name: narratium-macos.dmg
-
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.architecture }}
+          push: true
+          tags: |
+            ghcr.io/yuzukumo/narratium-webui:latest-${{ matrix.architecture }}
+            ghcr.io/yuzukumo/narratium-webui:sha-${{ github.sha }}-${{ matrix.architecture }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,scope=${{ matrix.architecture }}
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v6
-      with:
-        node-version: "24.14.0"
-        cache: "pnpm"
-        cache-dependency-path: pnpm-lock.yaml
-
-    - name: Install Linux dependencies
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt update
-        sudo apt install -y libwebkit2gtk-4.1-dev \
-          build-essential \
-          curl \
-          wget \
-          file \
-          libxdo-dev \
-          libssl-dev \
-          libayatana-appindicator3-dev \
-          librsvg2-dev
-
-    - name: Enable Corepack and pnpm
-      shell: bash
-      run: |
-        corepack enable
-        corepack prepare pnpm@9 --activate
-
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-
-    - name: Build Next.js app
-      run: pnpm build
-
-    - name: Install Pake CLI
-      run: npm install --global pake-cli
-
-    - name: Build with Pake (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: pake out/index.html --name Narratium --use-local-file --icon public/icon.png
-
-    - name: Build with Pake (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: pwsh
-      run: |
-        New-Item -Path "pake\icons" -ItemType Directory -Force | Out-Null
-        Copy-Item "public\icon.ico" "pake\icons\icon.ico" -Force
-        pake out/index.html --name Narratium
-
-    - name: Build with Pake (macOS)
-      if: matrix.os == 'macos-latest'
-      run: pake out/index.html --name Narratium --use-local-file --icon public/icon.icns
-
-    - name: Package artifacts (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        mkdir -p dist
-        echo "Current directory:"
-        pwd
-        echo "Files in current directory:"
-        ls -la
-        
-        # Look for .deb file
-        if [ -f "pake.deb" ]; then
-          echo "Found pake.deb file, using it as the artifact"
-          cp pake.deb dist/${{ matrix.asset_name }}
-        else
-          # Try to find any .deb file
-          DEB_FILE=$(find . -name "*.deb" | head -n 1)
-          if [ -n "$DEB_FILE" ]; then
-            echo "Found .deb file: $DEB_FILE"
-            cp "$DEB_FILE" dist/${{ matrix.asset_name }}
-          else
-            echo "No .deb file found, trying to find Narratium directory"
-            NARRATIUM_DIR=$(find . -type d -name "Narratium*" | grep -v "node_modules" | head -n 1)
-            if [ -z "$NARRATIUM_DIR" ]; then
-              echo "Error: Could not find Narratium directory or .deb file"
-              exit 1
-            else
-              echo "Found Narratium directory: $NARRATIUM_DIR"
-              tar -czf dist/${{ matrix.asset_name }} "$NARRATIUM_DIR"
-            fi
-          fi
-        fi
-
-    - name: Package artifacts (Windows)
-      if: matrix.os == 'windows-latest'
-      shell: pwsh
-      run: |
-        New-Item -Path "dist" -ItemType Directory -Force | Out-Null
-        if (Test-Path "temp_for_zip") {
-          Remove-Item "temp_for_zip" -Recurse -Force
-        }
-        New-Item -Path "temp_for_zip" -ItemType Directory -Force | Out-Null
-
-        $msiFile = Get-ChildItem -Path "C:\npm\prefix\node_modules\pake-cli\src-tauri\target\release\bundle\msi\*.msi" -File | Select-Object -First 1
-        if ($msiFile) {
-          echo "Found MSI file: $($msiFile.FullName)"
-          Copy-Item $msiFile.FullName -Destination "temp_for_zip\Narratium.msi"
-
-          $exeFile = Get-ChildItem -Path "C:\npm\prefix\node_modules\pake-cli\src-tauri\target\release\*.exe" -File | Select-Object -First 1
-          if ($exeFile) {
-            echo "Found EXE file: $($exeFile.FullName)"
-            Copy-Item $exeFile.FullName -Destination "temp_for_zip\Narratium.exe"
-          }
-
-          Set-Content -Path "temp_for_zip\README.txt" -Value "Narratium Windows Installation`n`nThis package contains:`n- Narratium.msi: Windows installer`n`nTo install, double-click the MSI file."
-          Compress-Archive -Path "temp_for_zip\*" -DestinationPath "dist\${{ matrix.asset_name }}" -Force
-        } else {
-          $msiFile = Get-ChildItem -Path . -Recurse -Filter "*.msi" | Where-Object { $_.FullName -like "*Narratium*.msi" } | Select-Object -First 1
-          if ($msiFile) {
-            echo "Found MSI file via fallback search: $($msiFile.FullName)"
-            Copy-Item $msiFile.FullName -Destination "temp_for_zip\Narratium.msi"
-            Set-Content -Path "temp_for_zip\README.txt" -Value "Narratium Windows Installation`n`nThis package contains:`n- Narratium.msi: Windows installer`n`nTo install, double-click the MSI file."
-            Compress-Archive -Path "temp_for_zip\*" -DestinationPath "dist\${{ matrix.asset_name }}" -Force
-          } else {
-            echo "Error: Could not find MSI file"
-            exit 1
-          }
-        }
-
-    - name: Package artifacts (macOS)
-      if: matrix.os == 'macos-latest'
-      run: |
-        mkdir -p dist
-        # Find the DMG file and copy it
-        DMG_FILE=$(find . -name "Narratium*.dmg" | head -n 1)
-        if [ -z "$DMG_FILE" ]; then
-          echo "Error: DMG file not found"
-          exit 1
-        else
-          echo "Found DMG file: $DMG_FILE"
-          cp "$DMG_FILE" dist/${{ matrix.asset_name }}
-        fi
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{ matrix.artifact_name }}
-        path: dist/${{ matrix.asset_name }}
-        retention-days: 30
-
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
+  manifest:
+    needs: container
+    runs-on: ubuntu-24.04
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v8
+      - uses: docker/login-action@v3
         with:
-          path: artifacts
-
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/Narratium-linux/narratium-linux.tar.gz
-            artifacts/Narratium-windows/narratium-windows.zip
-            artifacts/Narratium-macos/narratium-macos.dmg
-          draft: false
-          prerelease: false
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Publish multi-platform tags
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/yuzukumo/narratium-webui:latest \
+            ghcr.io/yuzukumo/narratium-webui:latest-amd64 \
+            ghcr.io/yuzukumo/narratium-webui:latest-arm64
+          docker buildx imagetools create \
+            --tag ghcr.io/yuzukumo/narratium-webui:sha-${{ github.sha }} \
+            ghcr.io/yuzukumo/narratium-webui:sha-${{ github.sha }}-amd64 \
+            ghcr.io/yuzukumo/narratium-webui:sha-${{ github.sha }}-arm64

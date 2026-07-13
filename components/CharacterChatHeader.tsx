@@ -1,7 +1,10 @@
 "use client";
 
 import { CharacterAvatarBackground } from "@/components/CharacterAvatarBackground";
+import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 import { trackButtonClick } from "@/utils/google-analytics";
+import { type AvailableModel } from "@/utils/api-client";
+import { microusdToUSDInput, multiplyMicrousdByMultiplier } from "@/utils/money";
 import { useLanguage } from "@/app/i18n";
 
 interface Props {
@@ -12,7 +15,11 @@ interface Props {
   serifFontClass: string;
   sidebarCollapsed: boolean;
   activeView: "chat" | "worldbook" | "regex" | "preset";
+  models: AvailableModel[];
+  activeModel: AvailableModel | null;
+  modelsLoading: boolean;
   toggleSidebar: () => void;
+  onModelChange: (modelId: string) => void;
   onSwitchToView: (view: "chat" | "worldbook" | "regex" | "preset") => void;
   onToggleView: () => void;
   onToggleRegexEditor: () => void;
@@ -23,13 +30,31 @@ export default function CharacterChatHeader({
   serifFontClass,
   sidebarCollapsed,
   activeView,
+  models,
+  activeModel,
+  modelsLoading,
   toggleSidebar,
+  onModelChange,
   onSwitchToView,
 }: Props) {
   const { t } = useLanguage();
+  const formatPrice = (value: string, multiplier: string): string => (
+    `$${microusdToUSDInput(multiplyMicrousdByMultiplier(value, multiplier))}`
+  );
+  const modelOptions: readonly SelectMenuOption<string>[] = models.length > 0
+    ? models.map((model) => ({
+      value: model.id,
+      label: model.external_id,
+      description: `${t("characterChat.modelPrice.input")} ${formatPrice(model.pricing.input_microusd_per_million, model.pricing.price_multiplier)} · ${t("characterChat.modelPrice.output")} ${formatPrice(model.pricing.output_microusd_per_million, model.pricing.price_multiplier)}`,
+    }))
+    : [{
+      value: "",
+      label: modelsLoading ? t("characterChat.modelsLoading") : t("characterChat.noModels"),
+      disabled: true,
+    }];
 
   return (
-    <div className="bg-[#1a1816] border-b border-[#534741] p-3 pr-14 sm:p-4 md:pr-20 lg:pr-24 flex min-w-0 flex-col gap-3 overflow-x-hidden sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-w-0 shrink-0 flex-col gap-3 overflow-x-hidden border-b border-[#534741] bg-[#1a1816] p-3 pr-14 sm:flex-row sm:items-center sm:justify-between sm:p-4 md:pr-20 lg:pr-24">
       <div className="flex items-center min-w-0 w-full sm:w-auto">
         {sidebarCollapsed && (
           <button
@@ -71,7 +96,7 @@ export default function CharacterChatHeader({
           </button>
         )}
 
-        <div className="flex items-center min-w-0 gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden">
             {character.avatar_path ? (
               <CharacterAvatarBackground avatarPath={character.avatar_path} />
@@ -90,9 +115,20 @@ export default function CharacterChatHeader({
             )}
           </div>
 
-          <h2 className={`text-base sm:text-lg text-[#eae6db] magical-text ${serifFontClass} truncate max-w-[120px] sm:max-w-[200px]`}>
-            {character.name}
-          </h2>
+          <div className="min-w-0">
+            <h2 className={`max-w-[13rem] truncate text-xs text-[#a18d6f] ${serifFontClass}`}>
+              {character.name}
+            </h2>
+            <SelectMenu
+              value={activeModel?.id || ""}
+              options={modelOptions}
+              onChange={onModelChange}
+              disabled={modelsLoading || models.length === 0}
+              ariaLabel={t("characterChat.selectModel")}
+              className="mt-0.5 w-[min(15rem,calc(100vw-8.5rem))] sm:w-64"
+              buttonClassName="!h-7 !border-0 !bg-transparent !px-0 !text-base !font-semibold !text-[#eae6db] hover:!text-[#f9c86d]"
+            />
+          </div>
         </div>
       </div>
 
@@ -106,7 +142,6 @@ export default function CharacterChatHeader({
               onSwitchToView("worldbook");
             }
           }}
-          data-tour="worldbook-button"
           className={`group shrink-0 px-2.5 sm:px-3 py-1.5 flex items-center rounded-md border transition-all duration-300 shadow-md relative overflow-hidden portal-button ${
             activeView === "worldbook"
               ? "border-[#59d3a2]/60 bg-gradient-to-br from-[#212821] to-[#131a16] shadow-[0_0_12px_rgba(88,248,183,0.3)]"
@@ -153,7 +188,6 @@ export default function CharacterChatHeader({
               onSwitchToView("regex");
             }
           }}
-          data-tour="regex-button"
           className={`group shrink-0 px-2.5 sm:px-3 py-1.5 flex items-center rounded-md border transition-all duration-300 shadow-md relative overflow-hidden ${
             activeView === "regex"
               ? "border-[#d39a59]/60 bg-gradient-to-br from-[#282521] to-[#1a1613] shadow-[0_0_12px_rgba(248,183,88,0.3)]"
@@ -200,7 +234,6 @@ export default function CharacterChatHeader({
               onSwitchToView("preset");
             }
           }}
-          data-tour="preset-button"
           className={`group shrink-0 px-2.5 sm:px-3 py-1.5 flex items-center rounded-md border transition-all duration-300 shadow-md relative overflow-hidden ${
             activeView === "preset"
               ? "border-[#9a59d3]/60 bg-gradient-to-br from-[#252128] to-[#161316] shadow-[0_0_12px_rgba(183,88,248,0.3)]"

@@ -7,13 +7,30 @@ export interface RegexScript {
   trimStrings: string[];
   placement: number[];
   disabled?: boolean;
+  markdownOnly?: boolean;
+  promptOnly?: boolean;
+  runOnEdit?: boolean;
+  substituteRegex?: number;
+  minDepth?: number | null;
+  maxDepth?: number | null;
   extensions?: {
     imported?: boolean;
     importedAt?: number;
     globalSource?: boolean;
     globalSourceId?: string;
     globalSourceName?: string;
+    trusted?: boolean;
+    [key: string]: unknown;
   };
+}
+
+export enum RegexPlacement {
+  MARKDOWN_DISPLAY = 0,
+  USER_INPUT = 1,
+  AI_OUTPUT = 2,
+  SLASH_COMMAND = 3,
+  WORLD_INFO = 5,
+  REASONING = 6,
 }
 
 export enum RegexScriptOwnerType {

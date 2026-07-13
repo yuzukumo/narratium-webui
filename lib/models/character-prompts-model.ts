@@ -1,11 +1,13 @@
+import type { Language } from "@/lib/i18n/languages";
+
 export interface CharacterPromptParams {
-  username?: string;
+  protagonistName?: string;
   name: string;
   number: number;
   prefixPrompt?: string;
   chainOfThoughtPrompt?: string;
   suffixPrompt?: string;
-  language?: "zh" | "en";
+  language?: Language;
   systemPrompt?: string;
   storyHistory?: string;
   conversationHistory?: string;

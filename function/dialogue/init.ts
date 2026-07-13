@@ -3,19 +3,17 @@ import { LocalCharacterDialogueOperations } from "@/lib/data/character-dialogue-
 import { LocalCharacterRecordOperations } from "@/lib/data/character-record-operation";
 import { adaptText } from "@/lib/adapter/tagReplacer";
 import { RegexProcessor } from "@/lib/core/regex-processor";
+import { RegexPlacement } from "@/lib/models/regex-script-model";
+import type { Language } from "@/lib/i18n/languages";
+import { defaultProtagonistName } from "@/lib/i18n/languages";
 
 interface InitCharacterDialogueOptions {
-  username?: string;
   characterId: string;
-  language?: "zh" | "en";
-  modelName: string;
-  baseUrl: string;
-  apiKey: string;
-  llmType?: "openai" | "anthropic" | "gemini";
+  language?: Language;
 }
 
 export async function initCharacterDialogue(options: InitCharacterDialogueOptions) {
-  const { username, characterId, language = "zh" } = options;
+  const { characterId, language = "zh" } = options;
 
   if (!characterId) {
     throw new Error("Missing required parameters");
@@ -28,6 +26,7 @@ export async function initCharacterDialogue(options: InitCharacterDialogueOption
     }
 
     const character = new Character(characterRecord);
+    const protagonistName = character.protagonistName || defaultProtagonistName(language);
     const firstAssistantMessage = await character.getFirstMessage();
     let dialogueTree = await LocalCharacterDialogueOperations.getDialogueTreeById(characterId);
 
@@ -36,45 +35,46 @@ export async function initCharacterDialogue(options: InitCharacterDialogueOption
     }
 
     let nodeIds: string[] = [];
-    const adaptedMessages: string[] = [];
-    const processedMessages: string[] = [];
     if (firstAssistantMessage) {
       const messagesToProcess = [...firstAssistantMessage];
       let firstProcessedMessage = "";
 
       if (messagesToProcess.length > 0) {
         const firstMessage = messagesToProcess[0];
-        const adaptedFirstMessage = adaptText(firstMessage, language, username);
+        const adaptedFirstMessage = adaptText(firstMessage, language, protagonistName, character.characterData.name);
         
         const firstRegexResult = await RegexProcessor.processFullContext(
           adaptedFirstMessage, 
           { 
             ownerId: characterId, 
+            placement: RegexPlacement.AI_OUTPUT,
+            isMarkdown: true,
+            depth: 0,
+            protagonistName,
+            charName: character.characterData.name,
           },
         );
         
         firstProcessedMessage = firstRegexResult.replacedText;
-        adaptedMessages.push(adaptedFirstMessage);
-        processedMessages.push(firstProcessedMessage);
       }
 
-      for (const message of [...messagesToProcess].reverse()) {
-        const adaptedMessage = adaptText(message, language, username);
+      for (const message of messagesToProcess) {
+        const adaptedMessage = adaptText(message, language, protagonistName, character.characterData.name);
         
         const regexResult = await RegexProcessor.processFullContext(
           adaptedMessage, 
           { 
             ownerId: characterId, 
+            placement: RegexPlacement.AI_OUTPUT,
+            isMarkdown: true,
+            depth: 0,
+            protagonistName,
+            charName: character.characterData.name,
           },
         );
         
         const processedMessage = regexResult.replacedText;
         
-        if (message !== messagesToProcess[messagesToProcess.length - 1]) {
-          adaptedMessages.push(adaptedMessage);
-          processedMessages.push(processedMessage);
-        }
-
         const nodeId = await LocalCharacterDialogueOperations.addNodeToDialogueTree(
           characterId,
           "root",
@@ -90,12 +90,16 @@ export async function initCharacterDialogue(options: InitCharacterDialogueOption
         );
         nodeIds.push(nodeId);
       }
+      if (nodeIds[0]) {
+        await LocalCharacterDialogueOperations.switchBranch(characterId, nodeIds[0]);
+      }
       
       return {
         success: true,
         characterId,
         firstMessage: firstProcessedMessage,
         nodeId: nodeIds[0],
+        alternativeNodeIds: nodeIds,
       };
     }
 

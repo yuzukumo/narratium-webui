@@ -1,79 +1,66 @@
 # Narratium
 
-AI 角色扮演面板与本地优先的故事工作台。
-
 ![Narratium banner](./public/banner.png)
 
-本仓库是 Narratium 面板代码库的当前维护版本，由旧仓库某个 fork/备份版本的本地备份恢复而来。原始上游仓库、历史贡献者图谱、社区链接以及部分旧项目资源目前已经无法由当前维护者访问或追溯，因此后续维护、发布和问题追踪都会在本仓库进行。
+可自托管的 AI 角色聊天与故事工作台。
 
-当前仓库：<https://github.com/yuzukumo/narratium-webui>
+[English](./README.md) | 简体中文 | [繁體中文](./README_ZH-TW.md) | [Español](./README_ES.md) | [Français](./README_FR.md)
 
-[![GitHub stars](https://img.shields.io/github/stars/yuzukumo/narratium-webui?style=social)](https://github.com/yuzukumo/narratium-webui)
-[![GitHub forks](https://img.shields.io/github/forks/yuzukumo/narratium-webui?style=social)](https://github.com/yuzukumo/narratium-webui/forks)
-[![Last commit](https://img.shields.io/github/last-commit/yuzukumo/narratium-webui)](https://github.com/yuzukumo/narratium-webui/commits/main)
-[![License](https://img.shields.io/github/license/yuzukumo/narratium-webui)](./LICENSE)
+本仓库由早期 fork 的本地备份重新创建，现由当前仓库所有者继续维护。原始上游仓库和贡献者仓库已经无法访问。当前项目仓库为 [yuzukumo/narratium-webui](https://github.com/yuzukumo/narratium-webui)。
 
-[English README](./README.md) | [入门指南](./docs/GETTING_STARTED.md) | [Issues](https://github.com/yuzukumo/narratium-webui/issues) | [Releases](https://github.com/yuzukumo/narratium-webui/releases)
+本仓库只包含应用代码，不包含角色卡、故事、预设或其他用户创作内容。
 
-## 项目说明
+## 功能
 
-Narratium 是一个可自托管的 AI 角色聊天面板，用于管理分支对话、提示词预设、世界书和正则文本处理。它更偏向本地运行或小规模私有部署，用户数据主要在浏览器/本地环境中处理，而不是依赖托管服务。
-
-本仓库仅包含面板与服务代码，不内置角色卡、故事内容、用户生成内容或社区贡献内容资产。
-
-## 功能特点
-
-- AI 角色聊天工作台，支持长对话流程。
-- 兼容 SillyTavern PNG 角色卡导入。
-- 可视化对话树，用于追踪和切换分支。
-- 提示词预设、世界书、正则脚本和高级设置编辑器。
-- OpenAI、Anthropic、Gemini 以及兼容接口配置。
-- 用户数据的本地导入/导出工具。
-- Docker Compose 部署与 Pake 打包脚本。
+- Next.js 前端、Go API 后端和 PostgreSQL 数据库。
+- 支持管理员和普通用户登录。
+- 角色卡、图片、对话、预设、世界书、正则脚本和用户设置存储在服务端。
+- 支持导入 SillyTavern PNG、JSON 和 CharX 角色卡，包括内嵌世界书、正则脚本和 CharX 资源。
+- 管理员配置 API 渠道和模型参数。
+- 支持 OpenAI Responses、OpenAI Chat Completions、Anthropic Messages 和 Gemini `generateContent`。
+- 支持流式聊天、分支对话、上下文管理、提示词缓存、计费和用户使用日志。
 
 ## 快速开始
 
-### Docker Compose
+需要 Docker Compose。
 
 ```bash
-docker compose up -d
+export NARRATIUM_SECRET='请替换为至少32字符且长期不变的随机值'
+docker compose up -d --build
 ```
 
-然后打开 <http://localhost:5000>。
+打开 <http://localhost:5000>，第一个成功注册的账户会直接成为管理员。必须配置 `NARRATIUM_SECRET`，它用于派生 JWT 和渠道密钥加密密钥，首次使用后不得更改。
 
-compose 文件使用当前镜像名：
+在“管理面板”中创建 API 渠道，选择接口格式，填写 Base URL、密钥和该渠道支持的原始模型 ID。模型 ID 可以自由填写。普通用户只能选择已启用渠道中的模型。
 
-```yaml
-ghcr.io/yuzukumo/narratium-webui:latest
-```
+默认端口直接在 `docker-compose.yml` 中修改。`NARRATIUM_MAX_BLOB_TOTAL_GB` 默认值为 `2`，设置为 `0` 可关闭每个用户的总存储限制。
 
-### 从源码运行
+请备份 `narratium-postgres`，并将 `NARRATIUM_SECRET` 保存在可靠的密码管理器中。
 
-推荐环境：
+## 本地开发
 
-- Node.js 20+
-- pnpm
-- Git
+工具链：Node.js `24.18.0` LTS、pnpm `11.12.0`、Go `1.26.5`、PostgreSQL `18`。
 
 ```bash
-git clone https://github.com/yuzukumo/narratium-webui.git
-cd narratium-webui
-pnpm install
-pnpm dev
+pnpm install --frozen-lockfile
 ```
 
-然后打开 <http://localhost:5000>。
-
-常用脚本：
+后端和前端启动方式见[入门指南](./docs/GETTING_STARTED.md)。运行检查：
 
 ```bash
-pnpm build
+pnpm typecheck
 pnpm lint
 pnpm test
+pnpm test:backend:race
+pnpm build
 ```
 
 ## 许可证
 
-本仓库使用 MIT 许可证。详见 [LICENSE](./LICENSE)。
+本项目使用 [MIT 许可证](./LICENSE)。导入或生成的内容仍受其来源和创作者条款约束。
 
-用户自行导入或生成的内容不属于本仓库范围，应遵循其来源、创作者或平台的对应条款。
+## 链接
+
+- [入门指南](./docs/GETTING_STARTED.md)
+- [Issues](https://github.com/yuzukumo/narratium-webui/issues)
+- [许可证](./LICENSE)

@@ -1,22 +1,17 @@
 import { NodeTool } from "@/lib/nodeflow/NodeTool";
 import { invokeLLM as invokeLLMApi } from "@/utils/llm-api";
-import { ApiProvider, DEFAULT_RESPONSE_LENGTH, ReasoningEffort } from "@/utils/api-config";
+import { DEFAULT_RESPONSE_LENGTH } from "@/utils/api-config";
+import type { Language } from "@/lib/i18n/languages";
 
 export interface LLMConfig {
-  modelName: string;
-  apiKey: string;
-  baseUrl?: string;
-  llmType?: ApiProvider;
+  modelId: string;
   temperature?: number;
   maxTokens?: number;
   maxRetries?: number;
   topP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
-  streaming?: boolean;
-  streamUsage?: boolean;
-  language?: "zh" | "en";
-  reasoningEffort?: ReasoningEffort;
+  language?: Language;
 }
 export class LLMNodeTools extends NodeTool {
   protected static readonly toolType: string = "llm";
@@ -53,15 +48,11 @@ export class LLMNodeTools extends NodeTool {
   ): Promise<Awaited<ReturnType<typeof invokeLLMApi>>> {
     try {
       return await invokeLLMApi({
-        provider: config.llmType || "openai",
-        baseUrl: config.baseUrl || "",
-        apiKey: config.apiKey || "",
-        model: config.modelName || "",
+        modelId: config.modelId,
         systemMessage,
         userMessage,
         maxTokens: config.maxTokens || DEFAULT_RESPONSE_LENGTH,
         temperature: config.temperature,
-        reasoningEffort: config.reasoningEffort,
       });
     } catch (error) {
       this.handleError(error as Error, "invokeLLM");

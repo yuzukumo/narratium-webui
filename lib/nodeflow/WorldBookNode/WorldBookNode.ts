@@ -23,8 +23,7 @@ export class WorldBookNode extends NodeBase {
     const userMessage = input.userMessage;
     const characterId = input.characterId;
     const language = input.language || "zh";
-    const username = input.username;
-    const charName = input.charName;
+    const characterName = input.characterName;
     const currentUserInput = input.currentUserInput || "";
     const contextWindow = input.contextWindow || 5;
 
@@ -43,17 +42,16 @@ export class WorldBookNode extends NodeBase {
       currentUserInput,
       language,
       contextWindow,
-      username,
-      charName,
-    ) as { systemMessage: string; userMessage: string };
+      characterName,
+    ) as { systemMessage: string; userMessage: string; protagonistName: string; characterName: string };
 
     return {
       systemMessage: result.systemMessage,
       userMessage: result.userMessage,
       characterId,
       language,
-      username,
-      charName,
+      protagonistName: result.protagonistName,
+      characterName: result.characterName,
       contextWindow,
       currentUserInput,
     };

@@ -17,4 +17,5 @@ export interface Preset {
   prompts: PresetPrompt[];
   created_at?: string;
   updated_at?: string;
+  extensions?: Record<string, unknown>;
 }

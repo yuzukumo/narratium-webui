@@ -4,6 +4,9 @@ import { PromptAssembler } from "@/lib/core/prompt-assembler";
 import { DialogueMessage } from "@/lib/models/character-dialogue-model";
 import { LocalCharacterRecordOperations } from "@/lib/data/character-record-operation";
 import { LocalCharacterDialogueOperations } from "@/lib/data/character-dialogue-operation";
+import { WorldBookOperations } from "@/lib/data/world-book-operation";
+import type { Language } from "@/lib/i18n/languages";
+import { defaultProtagonistName } from "@/lib/i18n/languages";
 
 export class WorldBookNodeTools extends NodeTool {
   protected static readonly toolType: string = "worldBook";
@@ -37,46 +40,66 @@ export class WorldBookNodeTools extends NodeTool {
     baseSystemMessage: string,
     userMessage: string,
     currentUserInput: string,
-    language: "zh" | "en" = "zh",
+    language: Language = "zh",
     contextWindow: number = 5,
-    username?: string,
     charName?: string,
-  ): Promise<{ systemMessage: string; userMessage: string }> {
+    nodeId?: string,
+  ): Promise<{ systemMessage: string; userMessage: string; protagonistName: string; characterName: string }> {
     try {
       const characterRecord = await LocalCharacterRecordOperations.getCharacterById(characterId);
       const character = new Character(characterRecord);
+      const protagonistName = character.protagonistName || defaultProtagonistName(language);
+      const characterName = charName || character.characterData.name;
+      const storedWorldBook = await WorldBookOperations.getWorldBook(characterId);
+      const savedSettings = await WorldBookOperations.getWorldBookSettings(characterId);
+      const scanDepth = character.worldBookSettings.scanDepth ?? savedSettings.contextWindow ?? contextWindow;
+      const characterData = character.getData(language);
 
-      const chatHistory = await this.getChatHistory(characterId, contextWindow);
+      const chatHistory = await this.getChatHistory(characterId, scanDepth, nodeId);
       
       const promptAssembler = new PromptAssembler({
         language,
-        contextWindow,
+        contextWindow: scanDepth,
+        worldBookTokenBudget: character.worldBookSettings.tokenBudget,
+        recursiveWorldBookScanning: character.worldBookSettings.recursiveScanning,
+        scanSources: {
+          characterDescription: characterData.description,
+          characterPersonality: characterData.personality,
+          characterDepthPrompt: characterData.depth_prompt?.prompt,
+          scenario: characterData.scenario,
+          creatorNotes: characterData.creatorcomment || characterData.creator_notes,
+        },
       });
 
       const result = promptAssembler.assemblePrompt(
-        character.worldBook,
+        savedSettings.enabled ? (storedWorldBook || character.worldBook) : undefined,
         baseSystemMessage,
         userMessage,
         chatHistory,
         currentUserInput,
-        username,
-        charName,
+        protagonistName,
+        characterName,
       );
-      return result;
+      return { ...result, protagonistName, characterName };
     } catch (error) {
       this.handleError(error as Error, "assemblePromptWithWorldBook");
     }
   }
 
-  private static async getChatHistory(characterId: string, contextWindow: number = 5): Promise<DialogueMessage[]> {
+  private static async getChatHistory(
+    characterId: string,
+    contextWindow: number = 5,
+    nodeId?: string,
+  ): Promise<DialogueMessage[]> {
     try {
       const dialogueTree = await LocalCharacterDialogueOperations.getDialogueTreeById(characterId);
       if (!dialogueTree) {
         return [];
       }
 
-      const nodePath = dialogueTree.current_node_id !== "root"
-        ? await LocalCharacterDialogueOperations.getDialoguePathToNode(characterId, dialogueTree.current_node_id)
+      const contextNodeId = nodeId || dialogueTree.current_node_id;
+      const nodePath = contextNodeId !== "root"
+        ? await LocalCharacterDialogueOperations.getDialoguePathToNode(characterId, contextNodeId)
         : [];
       
       const messages: DialogueMessage[] = [];
@@ -104,7 +127,7 @@ export class WorldBookNodeTools extends NodeTool {
         }
       }
 
-      const recentMessages = messages.slice(-contextWindow * 2);
+      const recentMessages = contextWindow === 0 ? [] : messages.slice(-contextWindow * 2);
       return recentMessages;
     } catch (error) {
       this.handleError(error as Error, "getChatHistory");

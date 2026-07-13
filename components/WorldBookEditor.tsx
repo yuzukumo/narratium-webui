@@ -29,13 +29,14 @@ interface WorldBookEntryData {
   selective: boolean;
   constant: boolean;
   position: string | number;
+  outletName: string;
   insertion_order: number;
   enabled: boolean;
   use_regex: boolean;
   depth: number;
   comment: string;
   tokens?: number;
-  extensions?: any;
+  extensions?: Record<string, unknown>;
   primaryKey: string;
   keyCount: number;
   secondaryKeyCount: number;
@@ -54,6 +55,8 @@ interface EditingEntry {
   secondary_keys: string[];
   content: string;
   position: number;
+  outletName: string;
+  extensions?: Record<string, unknown>;
   depth: number;
   enabled: boolean;
   use_regex: boolean;
@@ -329,7 +332,11 @@ export default function WorldBookEditor({
         secondary_keys: entry.secondary_keys || [],
         content: entry.content || "",
         position: typeof entry.position === "number" ? entry.position : 4,
-        depth: entry.depth || 1,
+        depth: entry.depth ?? 1,
+        outletName: entry.outletName || (
+          typeof entry.extensions?.outlet_name === "string" ? entry.extensions.outlet_name : ""
+        ),
+        extensions: entry.extensions || {},
         enabled: entry.enabled !== false,
         use_regex: entry.use_regex || false,
         selective: entry.selective || false,
@@ -351,6 +358,8 @@ export default function WorldBookEditor({
         selective: false,
         constant: false,
         insertion_order: 0,
+        outletName: "",
+        extensions: {},
       });
     }
     setIsEditModalOpen(true);
@@ -379,6 +388,8 @@ export default function WorldBookEditor({
         selective: editingEntry.selective,
         constant: editingEntry.constant,
         insertion_order: editingEntry.insertion_order,
+        outletName: editingEntry.outletName,
+        extensions: editingEntry.extensions,
       });
 
       if (result.success) {
@@ -393,13 +404,17 @@ export default function WorldBookEditor({
           selective: editingEntry.selective,
           constant: editingEntry.constant,
           position: editingEntry.position,
+          outletName: editingEntry.outletName,
           insertion_order: editingEntry.insertion_order,
           enabled: editingEntry.enabled,
           use_regex: editingEntry.use_regex,
           depth: editingEntry.depth,
           comment: editingEntry.comment,
           tokens: editingEntry.content.length,
-          extensions: {},
+          extensions: {
+            ...(editingEntry.extensions || {}),
+            outlet_name: editingEntry.outletName,
+          },
           primaryKey: editingEntry.keys.filter(k => k.trim())[0] || "",
           keyCount: editingEntry.keys.filter(k => k.trim()).length,
           secondaryKeyCount: editingEntry.secondary_keys.filter(k => k.trim()).length,
@@ -446,9 +461,12 @@ export default function WorldBookEditor({
     const positionMap: Record<string | number, string> = {
       0: t("worldBook.positionOptions.systemPromptStart"),
       1: t("worldBook.positionOptions.afterSystemPrompt"), 
-      2: t("worldBook.positionOptions.userMessageStart"),
-      3: t("worldBook.positionOptions.afterResponseMode"),
+      2: t("worldBook.positionOptions.authorNoteTop"),
+      3: t("worldBook.positionOptions.authorNoteBottom"),
       4: t("worldBook.positionOptions.basedOnDepth"),
+      5: t("worldBook.positionOptions.examplesTop"),
+      6: t("worldBook.positionOptions.examplesBottom"),
+      7: t("worldBook.positionOptions.outlet"),
     };
     return positionMap[position] || "Unknown";
   };

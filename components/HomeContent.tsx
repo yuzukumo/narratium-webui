@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useLanguage } from "../app/i18n";
-import UserTour from "@/components/UserTour";
-import { useTour } from "@/hooks/useTour";
 
 /**
  * Main content component for the home page
@@ -17,7 +15,6 @@ export default function HomeContent() {
   const { t, fontClass, serifFontClass } = useLanguage();
   const [mounted, setMounted] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState(false);
-  const { isTourVisible, currentTourSteps, completeTour, skipTour } = useTour();
 
   useEffect(() => {
     setMounted(true);
@@ -121,12 +118,6 @@ export default function HomeContent() {
           </Link>
         </div>
       </motion.div>
-      <UserTour
-        steps={currentTourSteps}
-        isVisible={isTourVisible}
-        onComplete={completeTour}
-        onSkip={skipTour}
-      />
     </div>
   );
 } 

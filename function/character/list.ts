@@ -1,7 +1,9 @@
 import { LocalCharacterRecordOperations } from "@/lib/data/character-record-operation";
 import { adaptCharacterData } from "@/lib/adapter/tagReplacer";
+import type { Language } from "@/lib/i18n/languages";
+import { defaultProtagonistName } from "@/lib/i18n/languages";
 
-export async function getAllCharacters(language: "en" | "zh", username?: string) {
+export async function getAllCharacters(language: Language) {
   try {
     const characters = await LocalCharacterRecordOperations.getAllCharacters();
 
@@ -19,9 +21,14 @@ export async function getAllCharacters(language: "en" | "zh", username?: string)
           creatorcomment: character.data.creatorcomment || character.data.data?.creator_notes,
           created_at: character.created_at,
           updated_at: character.updated_at,
+          last_used_at: character.last_used_at,
           avatar_path: character.imagePath,
         };
-        const processedData = adaptCharacterData(characterData, language, username);
+        const processedData = adaptCharacterData(
+          characterData,
+          language,
+          character.protagonistName?.trim() || defaultProtagonistName(language),
+        );
         
         return processedData;
       });

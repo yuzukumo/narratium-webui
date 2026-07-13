@@ -1,5 +1,6 @@
-import { readData, writeData, WORLD_BOOK_FILE } from "@/lib/data/local-storage";
+import { inheritDataRevision, readData, writeData, WORLD_BOOK_FILE } from "@/lib/data/local-storage";
 import { WorldBookEntry } from "@/lib/models/world-book-model";
+import { normalizeWorldBookEntry } from "@/lib/character-card/normalize";
 
 export interface WorldBookSettings {
   enabled: boolean;
@@ -17,7 +18,12 @@ const DEFAULT_SETTINGS: WorldBookSettings = {
 export class WorldBookOperations {
   static async getWorldBooks(): Promise<Record<string, any>> {
     const worldBooksArray = await readData(WORLD_BOOK_FILE);
-    return worldBooksArray[0] || {};
+    if (worldBooksArray[0]) {
+      return worldBooksArray[0];
+    }
+    const emptyWorldBooks: Record<string, any> = {};
+    inheritDataRevision(WORLD_BOOK_FILE, worldBooksArray, [emptyWorldBooks]);
+    return emptyWorldBooks;
   }
 
   private static async saveWorldBooks(worldBooks: Record<string, any>): Promise<void> {
@@ -40,17 +46,9 @@ export class WorldBookOperations {
   ): Promise<boolean> {
     const worldBooks = await this.getWorldBooks();
     
-    const processEntry = (entry: WorldBookEntry): WorldBookEntry => {
-      return {
-        ...entry,
-        depth: entry.extensions?.depth ?? 1,
-        position: entry.extensions?.position ?? 4,
-      } as WorldBookEntry;
-    };
-    
     const entries = Array.isArray(worldBook) 
       ? worldBook.reduce((acc, entry, i) => {
-        const processedEntry = processEntry(entry);
+        const processedEntry = normalizeWorldBookEntry(entry, i);
         return {
           ...acc,
           [`entry_${i}`]: processedEntry,
@@ -58,7 +56,7 @@ export class WorldBookOperations {
       }, {} as Record<string, WorldBookEntry>)
       : Object.fromEntries(
         Object.entries(worldBook).map(([key, entry]) => {
-          const processedEntry = processEntry(entry);
+          const processedEntry = normalizeWorldBookEntry(entry);
           return [key, processedEntry];
         }),
       );
@@ -66,6 +64,13 @@ export class WorldBookOperations {
     worldBooks[characterId] = entries;
     await this.saveWorldBooks(worldBooks);
     return true;
+  }
+
+  static async deleteWorldBook(characterId: string): Promise<void> {
+    const worldBooks = await this.getWorldBooks();
+    delete worldBooks[characterId];
+    delete worldBooks[`${characterId}_settings`];
+    await this.saveWorldBooks(worldBooks);
   }
   
   static async addWorldBookEntry(
@@ -130,7 +135,10 @@ export class WorldBookOperations {
     updates: Partial<WorldBookSettings>,
   ): Promise<WorldBookSettings> {
     const worldBooks = await this.getWorldBooks();
-    const currentSettings = await this.getWorldBookSettings(characterId);
+    const currentSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(worldBooks[`${characterId}_settings`] as WorldBookSettings | undefined),
+    };
     const newSettings = { ...currentSettings, ...updates };
     
     worldBooks[`${characterId}_settings`] = newSettings;

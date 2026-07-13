@@ -1,34 +1,23 @@
-/**
- * Character Chat Panel Component
- * 
- * This component implements the main chat interface for character interactions, featuring:
- * - Real-time message display with HTML formatting
- * - Character avatar and name display
- * - Message regeneration and truncation capabilities
- * - Suggested input system
- * - Auto-scrolling chat history
- * - Fantasy-themed UI elements
- * 
- * The component handles both user and character messages, with special formatting
- * and interactive features for each message type.
- * 
- * Dependencies:
- * - ChatHtmlBubble: For rendering formatted chat messages
- * - CharacterAvatarBackground: For character avatar display
- * - Google Analytics: For tracking user interactions
- */
-
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowDown,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  RotateCcw,
+  Send,
+  Square,
+  X,
+} from "lucide-react";
 import ChatHtmlBubble from "@/components/ChatHtmlBubble";
 import { CharacterAvatarBackground } from "@/components/CharacterAvatarBackground";
-import { ParsedResponse, ResponseUsageMetrics } from "@/lib/models/parsed-response";
+import type { ParsedResponse, ResponseUsageMetrics } from "@/lib/models/parsed-response";
 import { trackButtonClick, trackFormSubmit } from "@/utils/google-analytics";
+import { formatMicrousd } from "@/utils/money";
 
-/**
- * Interface definitions for the component's data structures
- */
 interface Character {
   id: string;
   name: string;
@@ -41,34 +30,52 @@ interface Message {
   role: string;
   content: string;
   timestamp?: string;
-  isUser?: boolean;
   parsedContent?: ParsedResponse | null;
+  nodeId?: string;
+  parentNodeId?: string;
+  alternativeIndex?: number;
+  alternativeCount?: number;
+  alternativeNodeIds?: string[];
 }
+
+type ActiveModes = {
+  "story-progress": boolean;
+  perspective: { active: boolean; mode: "novel" | "protagonist" };
+  "scene-setting": boolean;
+};
 
 interface Props {
   character: Character;
   messages: Message[];
   userInput: string;
-  setUserInput: (val: string) => void;
+  setUserInput: (value: string) => void;
   isSending: boolean;
   suggestedInputs: string[];
-  onSubmit: (e: React.FormEvent) => void;
+  onSubmit: (event: React.FormEvent) => void;
+  onStop: () => void;
   onSuggestedInput: (input: string) => void;
-  onTruncate: (id: string) => void;
-  onRegenerate: (id: string) => void;
+  onSwitchBranch: (nodeId: string) => void;
+  onRegenerate: (nodeId: string) => void;
+  onEditUserMessage: (nodeId: string, content: string) => void;
   fontClass: string;
   serifFontClass: string;
   t: (key: string) => string;
-  activeModes: Record<string, any>;
-  setActiveModes: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+  activeModes: ActiveModes;
+  setActiveModes: React.Dispatch<React.SetStateAction<ActiveModes>>;
+  contextUsedTokens: number;
+  contextWindow: number;
 }
 
-/**
- * Main chat panel component that handles character interactions
- * 
- * @param {Props} props - Component properties including character data, messages, and callbacks
- * @returns {JSX.Element} The complete chat interface with message history and input controls
- */
+function displayUserMessage(content: string): string {
+  return (content.match(/<input_message>([\s\S]*?)<\/input_message>/)?.[1] || content)
+    .replace(/^\s*(玩家输入指令|Player Input)[:：]\s*/i, "")
+    .trim();
+}
+
+function nodeIdFor(message: Message): string {
+  return message.nodeId || message.id;
+}
+
 export default function CharacterChatPanel({
   character,
   messages,
@@ -77,594 +84,362 @@ export default function CharacterChatPanel({
   isSending,
   suggestedInputs,
   onSubmit,
+  onStop,
   onSuggestedInput,
-  onTruncate,
+  onSwitchBranch,
   onRegenerate,
+  onEditUserMessage,
   fontClass,
   serifFontClass,
   t,
   activeModes,
   setActiveModes,
+  contextUsedTokens,
+  contextWindow,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const keepAtBottomRef = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
 
-  useEffect(() => {
-    const savedStreaming = localStorage.getItem("streamingEnabled");
-    const isStreamingEnabled = savedStreaming === null ? true : savedStreaming === "true";
-
-    if (savedStreaming === null) {
-      localStorage.setItem("streamingEnabled", "true");
-    }
-
-    setActiveModes(prev => ({
-      ...prev,
-      streaming: isStreamingEnabled,
-    }));
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const element = scrollRef.current;
+    if (!element) return;
+    keepAtBottomRef.current = true;
+    setShowScrollToBottom(false);
+    element.scrollTo({ top: element.scrollHeight, behavior });
   }, []);
 
-  const scrollToBottom = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  };  
+  const maybeScrollToBottom = useCallback(() => {
+    if (keepAtBottomRef.current) scrollToBottom();
+  }, [scrollToBottom]);
 
-  const maybeScrollToBottom = (threshold = 120) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distance < threshold) {
-      scrollToBottom();
-    }
-  };
-
-  const [suggestionsCollapsed, setSuggestionsCollapsed] = useState(false);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(maybeScrollToBottom);
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, maybeScrollToBottom]);
 
   const formatResponseMeta = (usage?: ResponseUsageMetrics | null) => {
-    if (!usage) {
-      return "";
-    }
-
+    if (!usage) return "";
+    const number = new Intl.NumberFormat();
     const durationSeconds = usage.durationMs / 1000;
-    const formattedInputTokens = new Intl.NumberFormat("en-US").format(usage.inputTokens);
-    const formattedOutputTokens = new Intl.NumberFormat("en-US").format(usage.outputTokens);
-    const formattedCachedTokens = new Intl.NumberFormat("en-US").format(usage.cachedInputTokens);
-    const formattedCacheCreationTokens = new Intl.NumberFormat("en-US").format(usage.cacheCreationInputTokens);
-    const formattedDuration = durationSeconds >= 10 ? durationSeconds.toFixed(1) : durationSeconds.toFixed(2);
-    const formattedSpeed = usage.tokensPerSecond >= 100
+    const firstTokenSeconds = usage.firstTokenMs / 1000;
+    const duration = durationSeconds >= 10 ? durationSeconds.toFixed(1) : durationSeconds.toFixed(2);
+    const firstToken = firstTokenSeconds >= 10 ? firstTokenSeconds.toFixed(1) : firstTokenSeconds.toFixed(2);
+    const speed = usage.tokensPerSecond >= 100
       ? usage.tokensPerSecond.toFixed(0)
       : usage.tokensPerSecond.toFixed(1);
-    const cacheParts = [
-      usage.cachedInputTokens > 0 ? `Cache hit ${formattedCachedTokens}` : "",
-      usage.cacheCreationInputTokens > 0 ? `Cache write ${formattedCacheCreationTokens}` : "",
-    ].filter(Boolean);
-    const cacheText = cacheParts.length > 0 ? ` | ${cacheParts.join(" | ")}` : "";
-
-    return `Input ${formattedInputTokens} | Completion ${formattedOutputTokens}${cacheText} | Time ${formattedDuration}s | Speed ${formattedSpeed} token/s`;
+    return [
+      usage.costMicrousd !== undefined
+        ? `${t("characterChat.metrics.cost")} ${formatMicrousd(usage.costMicrousd, 6)}`
+        : "",
+      `${t("characterChat.metrics.input")} ${number.format(usage.inputTokens)}`,
+      `${t("characterChat.metrics.cacheCreation")} ${number.format(usage.cacheCreationInputTokens)}`,
+      `${t("characterChat.metrics.cacheRead")} ${number.format(usage.cacheReadInputTokens)}`,
+      `${t("characterChat.metrics.output")} ${number.format(usage.outputTokens)}`,
+      `${t("characterChat.metrics.firstToken")} ${firstToken}s`,
+      `${t("characterChat.metrics.totalTime")} ${duration}s`,
+      `${t("characterChat.metrics.speed")} ${speed} tok/s`,
+    ].filter(Boolean).join(" · ");
   };
 
-  const shouldShowRegenerateButton = (message: Message, index: number) => {
-    if (isSending) return false;
-    if (message.role !== "assistant" && message.role !== "error") return false;
-    if (index !== messages.length - 1) return false;
-    
-    return true;
+  const normalizedContextWindow = Math.max(contextWindow || 0, 0);
+  const normalizedContextUsage = Math.max(contextUsedTokens || 0, 0);
+  const contextPercentage = normalizedContextWindow > 0
+    ? Math.min((normalizedContextUsage / normalizedContextWindow) * 100, 100)
+    : 0;
+  const contextLabel = `${t("characterChat.contextUsage")}: ${new Intl.NumberFormat().format(normalizedContextUsage)} / ${new Intl.NumberFormat().format(normalizedContextWindow)} (${contextPercentage.toFixed(1)}%)`;
+
+  const beginEditing = (message: Message) => {
+    setEditingMessageId(nodeIdFor(message));
+    setEditingText(displayUserMessage(message.content));
   };
 
-  useEffect(() => {
-    const id = setTimeout(() => scrollToBottom(), 300);
-    return () => clearTimeout(id);
-  }, [messages]);
+  const submitEdit = (message: Message) => {
+    const value = editingText.trim();
+    if (!value || isSending) return;
+    trackButtonClick("page", "提交编辑后的用户消息");
+    setEditingMessageId(null);
+    setEditingText("");
+    onEditUserMessage(nodeIdFor(message), value);
+  };
 
-  useEffect(() => {
-    // On mount, restore fastModel state from localStorage
-    const fastModelEnabled = localStorage.getItem("fastModelEnabled");
-    if (fastModelEnabled !== null) {
-      setActiveModes(prev => ({ ...prev, fastModel: fastModelEnabled === "true" }));
-    }
-  }, []);
-  
+  const renderBranchPicker = (message: Message) => {
+    const ids = message.alternativeNodeIds || [];
+    const count = message.alternativeCount || ids.length;
+    const index = message.alternativeIndex || 1;
+    if (count <= 1 || ids.length <= 1) return null;
+    const previous = ids[index - 2];
+    const next = ids[index];
+    return (
+      <div className="ml-1 inline-flex h-6 items-center gap-0.5 rounded-md border border-[#4b4035] bg-[#211e1b] px-0.5 text-[11px] text-[#c7b28d]" aria-label={t("characterChat.alternativeReply")}>
+        <button
+          type="button"
+          disabled={!previous || isSending}
+          onClick={() => previous && onSwitchBranch(previous)}
+          title={t("characterChat.previousReply")}
+          aria-label={t("characterChat.previousReply")}
+          className="flex h-5 w-5 items-center justify-center rounded text-[#c0a480] transition-colors hover:bg-[#382e25] hover:text-[#f9c86d] disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <ChevronLeft size={13} />
+        </button>
+        <span className="min-w-[2.5rem] text-center tabular-nums">{index}/{count}</span>
+        <button
+          type="button"
+          disabled={!next || isSending}
+          onClick={() => next && onSwitchBranch(next)}
+          title={t("characterChat.nextReply")}
+          aria-label={t("characterChat.nextReply")}
+          className="flex h-5 w-5 items-center justify-center rounded text-[#c0a480] transition-colors hover:bg-[#382e25] hover:text-[#f9c86d] disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <ChevronRight size={13} />
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex h-full max-h-screen min-w-0 flex-col overflow-x-hidden">
-      <div className="flex-grow overflow-y-auto overflow-x-hidden p-3 sm:p-6 fantasy-scrollbar" ref={scrollRef}>
-        <div className="max-w-4xl mx-auto">
-          {messages.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 opacity-60">
-                <svg className="w-full h-full" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-                    stroke="#f9c86d"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          className="fantasy-scrollbar h-full overscroll-contain overflow-y-auto overflow-x-hidden p-3 sm:p-6"
+          onScroll={() => {
+            const element = scrollRef.current;
+            if (!element) return;
+            const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight <= 80;
+            keepAtBottomRef.current = nearBottom;
+            setShowScrollToBottom(!nearBottom);
+          }}
+        >
+          <div className="mx-auto max-w-4xl">
+            {messages.length === 0 ? (
+              <div className="py-12 text-center">
+                <div className="mx-auto mb-4 h-16 w-16 opacity-60">
+                  <svg className="h-full w-full" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="#f9c86d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <p className={`text-[#c0a480] ${serifFontClass}`}>{t("characterChat.startConversation")}</p>
               </div>
-              <p className={`text-[#c0a480] ${serifFontClass}`}>
-                {t("characterChat.startConversation")}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {messages.map((message, index) => {
-                if (message.role === "sample") return null;
+            ) : (
+              <div className="space-y-8">
+                {messages.map((message, index) => {
+                  if (message.role === "sample") return null;
+                  const nodeId = nodeIdFor(message);
+                  const isError = message.role === "error";
+                  const isEditing = message.role === "user" && editingMessageId === nodeId;
+                  const hasUserMessage = messages.some((candidate) => (
+                    candidate.role === "user" && nodeIdFor(candidate) === nodeId
+                  ));
+                  const canRetry = (message.role === "assistant" || isError)
+                    && hasUserMessage
+                    && !isSending
+                    && message.content.trim() !== "";
 
-                const isInlineError = message.role === "error";
-
-                return message.role === "user" ? (
-                  <div key={index} className="flex justify-end mb-4">
-                    <div className="whitespace-pre-line text-[#f4e8c1] story-text leading-relaxed magical-text">
-                      <p
-                        className={`${serifFontClass}`}
-                        dangerouslySetInnerHTML={{
-                          __html: (
-                            message.content.match(/<input_message>([\s\S]*?)<\/input_message>/)?.[1] || ""
-                          ).replace(
-                            /^[\s\n\r]*((<[^>]+>\s*)*)?(玩家输入指令|Player Input)[:：]\s*/i,
-                            "",
-                          ),
-                        }}
-                      ></p>
-                    </div>
-                  </div>
-                ) : (
-                  <div key={message.id} className="mb-6">
-                    <div className="flex flex-wrap items-center gap-y-1 mb-2">
-                      <div className="w-8 h-8 rounded-full overflow-hidden mr-2">
-                        {isInlineError ? (
-                          <div className="w-full h-full flex items-center justify-center bg-[#3a1f1f] text-[#f1b4b4]">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={1.8}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M12 9v4m0 4h.01M10.29 3.86l-7.5 13A1 1 0 003.66 18h16.68a1 1 0 00.87-1.5l-7.5-13a1 1 0 00-1.74 0z"
+                  if (message.role === "user") {
+                    return (
+                      <div key={`${nodeId}-user-${index}`} className="group mb-4 flex justify-end">
+                        <div className="max-w-[90%] min-w-0">
+                          {isEditing ? (
+                            <div className="flex min-w-[min(34rem,90vw)] flex-col gap-2 rounded-lg border border-[#776044] bg-[#29231e] p-2 shadow-lg">
+                              <textarea
+                                value={editingText}
+                                onChange={(event) => setEditingText(event.target.value)}
+                                rows={3}
+                                autoFocus
+                                className={`w-full resize-y rounded border border-[#534741] bg-[#1c1917] px-3 py-2 text-sm leading-6 text-[#f4e8c1] outline-none focus:border-[#c49752] ${fontClass}`}
                               />
-                            </svg>
-                          </div>
-                        ) : character.avatar_path ? (
-                          <CharacterAvatarBackground avatarPath={character.avatar_path} />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-[#1a1816]">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4 text-[#534741]"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={1.5}
-                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                              />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center">
-                        <span className={`text-sm font-medium text-[#f4e8c1] ${serifFontClass}`}>
-                          {isInlineError
-                            ? (t("characterChat.requestFailed") || "Request Failed")
-                            : character.name}
-                        </span>
-                        {message.role === "assistant" && shouldShowRegenerateButton(message, index) && (
-                          <>
-                            <button
-                              onClick={() => {
-                                setActiveModes(prev => {
-                                  const newStreaming = !prev.streaming;
-                                  return { ...prev, streaming: newStreaming };
-                                });
-                                localStorage.setItem("streamingEnabled", String(!activeModes.streaming));
-                                trackButtonClick("toggle_streaming", "流式输出切换");
-                              }}
-                              className={`mx-1 p-1 rounded-md transition-all duration-300 group relative ${
-                                activeModes.streaming
-                                  ? "text-amber-400 hover:text-amber-300"
-                                  : "text-[#8a8a8a] hover:text-[#a8a8a8]"
-                              }`}
-                              data-tooltip={activeModes.streaming ? t("characterChat.disableStreaming") : t("characterChat.enableStreaming")}
-                            >
-                              <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-[#2a261f] text-[#f4e8c1] text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap border border-[#534741]">
-                                {activeModes.streaming ? t("characterChat.disableStreaming") : t("characterChat.enableStreaming")}
+                              <div className="flex justify-end gap-2">
+                                <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(""); }} className="flex h-7 items-center gap-1 rounded border border-[#534741] px-2 text-xs text-[#b5a18a] hover:border-[#806d58] hover:text-[#f4e8c1]">
+                                  <X size={13} /> {t("common.cancel") || "Cancel"}
+                                </button>
+                                <button type="button" disabled={!editingText.trim() || isSending} onClick={() => submitEdit(message)} className="flex h-7 items-center gap-1 rounded border border-[#9c7540] bg-[#6d512e] px-2 text-xs text-[#fff1c7] hover:bg-[#82623a] disabled:opacity-40">
+                                  <Check size={13} /> {t("common.save") || "Save"}
+                                </button>
                               </div>
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  d="M13 2L3 14h7v8l8-12h-7z"
-                                  fill={activeModes.streaming ? "#FFC107" : "none"}
-                                  stroke={activeModes.streaming ? "#FFC107" : "#8a8a8a"}
-                                />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => {
-                                setActiveModes(prev => {
-                                  const newFastModel = !prev.fastModel;
-                                  // Store fastModel state in localStorage
-                                  localStorage.setItem("fastModelEnabled", String(newFastModel));
-                                  return { ...prev, fastModel: newFastModel };
-                                });
-                                trackButtonClick("toggle_fastmodel", "快速模式切换");
-                              }}
-                              className={`mx-1 p-1 rounded-md transition-all duration-300 group relative ${
-                                activeModes.fastModel
-                                  ? "text-blue-500 hover:text-blue-400"
-                                  : "text-[#8a8a8a] hover:text-[#a8a8a8]"
-                              }`}
-                              data-tooltip={activeModes.fastModel ? t("characterChat.disableFastModel") : t("characterChat.enableFastModel")}
-                            >
-                              <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-[#2a261f] text-[#f4e8c1] text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap border border-[#534741]">
-                                {activeModes.fastModel ? t("characterChat.disableFastModel") : t("characterChat.enableFastModel")}
-                              </div>
-                              {/* Lightning bolt SVG for fastmodel, blue when active */}
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-4 w-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  d="M7 2L17 14h-7v8l-8-12h7z"
-                                  fill={activeModes.fastModel ? "#3B82F6" : "none"}
-                                  stroke={activeModes.fastModel ? "#3B82F6" : "#8a8a8a"}
-                                />
-                              </svg>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                      <div className="flex items-center">
-                        {!isInlineError && message.content.trim() !== "" && (
-                          <button
-                            onClick={() => {
-                              trackButtonClick("page", "跳转到此消息");
-                              onTruncate(message.id);
-                            }}
-                            className="ml-1 w-6 h-6 flex items-center justify-center text-[#a18d6f] hover:text-green-400 bg-[#1c1c1c] rounded-lg border border-[#333333] shadow-inner transition-all duration-300 hover:border-[#444444] hover:shadow-[0_0_8px_rgba(34,197,94,0.4)] group relative"
-                            data-tooltip={t("characterChat.jumpToMessage")}
-                          >
-                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-[#2a261f] text-[#f4e8c1] text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap border border-[#534741]">
-                              {t("characterChat.jumpToMessage")}
                             </div>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="12"
-                              height="12"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M12 19V5"></path>
-                              <polyline points="5 12 12 5 19 12"></polyline>
-                            </svg>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            trackButtonClick("page", "重新生成消息");
-                            onRegenerate(message.id);
-                          }}
-                          className={`ml-1 w-6 h-6 flex items-center justify-center text-[#a18d6f] hover:text-orange-400 bg-[#1c1c1c] rounded-lg border border-[#333333] shadow-inner transition-all duration-300 hover:border-[#444444] hover:shadow-[0_0_8px_rgba(249,115,22,0.4)] group relative ${
-                            shouldShowRegenerateButton(message, index) ? "" : "hidden"
-                          }`}
-                          data-tooltip={t("characterChat.regenerateMessage")}
-                        >
-                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-[#2a261f] text-[#f4e8c1] text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap border border-[#534741]">
-                            {t("characterChat.regenerateMessage")}
-                          </div>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="12"
-                            height="12"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="17 1 21 5 17 9"></polyline>
-                            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-                            <polyline points="7 23 3 19 7 15"></polyline>
-                            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    {!isInlineError && message.parsedContent?.usage && (
-                      <div className="pl-10 mb-3 text-[11px] leading-5 text-[#8a8177]">
-                        {formatResponseMeta(message.parsedContent.usage)}
-                      </div>
-                    )}
-                    {isInlineError ? (
-                      <div className="pl-10">
-                        <div className="rounded-xl border border-[#8c4747] bg-[rgba(58,31,31,0.72)] px-4 py-3 shadow-[0_0_16px_rgba(140,71,71,0.12)]">
-                          <div className={`text-sm leading-6 text-[#f4d7d7] ${fontClass}`}>
-                            {message.content}
-                          </div>
-                          <div className={`mt-2 text-[11px] leading-5 text-[#c9a7a7] ${fontClass}`}>
-                            {t("characterChat.errorRetryHint") || "Use the regenerate button on this message to try again."}
-                          </div>
+                          ) : (
+                            <div className="flex items-start gap-2">
+                              <div className={`story-text whitespace-pre-wrap break-words leading-relaxed text-[#f4e8c1] magical-text ${serifFontClass}`}>
+                                {displayUserMessage(message.content)}
+                              </div>
+                              {!isSending && (
+                                <button
+                                  type="button"
+                                  onClick={() => beginEditing(message)}
+                                  title={t("characterChat.editMessage")}
+                                  aria-label={t("characterChat.editMessage")}
+                                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-[#8f7b63] opacity-0 transition-all hover:border-[#534741] hover:bg-[#29231e] hover:text-[#f4d28a] group-hover:opacity-100 focus-visible:opacity-100"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    ) : (
-                      <ChatHtmlBubble
-                        key={message.id}
-                        html={message.content}
-                        isLoading={
-                          isSending && index === messages.length - 1 && message.content.trim() === ""
-                        }
-                        enableStreaming={false}
-                        onContentChange={
-                          index === messages.length - 1 ? () => maybeScrollToBottom() : undefined
-                        }
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  }
 
-              {isSending && (
-                <div className="flex items-center space-x-2 text-[#c0a480] mb-8 pb-4 pt-2 min-h-[40px]">
-                  <div className="relative w-6 h-6 flex items-center justify-center">
-                    <div className="absolute inset-0 rounded-full border-2 border-t-[#f9c86d] border-r-[#c0a480] border-b-[#a18d6f] border-l-transparent animate-spin"></div>
-                    <div className="absolute inset-1 rounded-full border-2 border-t-[#a18d6f] border-r-[#f9c86d] border-b-[#c0a480] border-l-transparent animate-spin-slow"></div>
+                  return (
+                    <div key={`${nodeId}-assistant-${index}`} className="mb-6">
+                      <div className="mb-2 flex flex-wrap items-center gap-y-1">
+                        <div className="mr-2 h-8 w-8 overflow-hidden rounded-full">
+                          {isError ? (
+                            <div className="flex h-full w-full items-center justify-center bg-[#3a1f1f] text-[#f1b4b4]">!</div>
+                          ) : character.avatar_path ? (
+                            <CharacterAvatarBackground avatarPath={character.avatar_path} />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-[#1a1816] text-[#8f7b63]">{character.name.slice(0, 1)}</div>
+                          )}
+                        </div>
+                        <span className={`text-sm font-medium text-[#f4e8c1] ${serifFontClass}`}>
+                          {isError ? (t("characterChat.requestFailed") || "Request Failed") : character.name}
+                        </span>
+                        {!isError && renderBranchPicker(message)}
+                        {canRetry && (
+                          <button
+                            type="button"
+                            onClick={() => { trackButtonClick("page", "重新生成消息"); onRegenerate(nodeId); }}
+                            title={t("characterChat.regenerateMessage")}
+                            aria-label={t("characterChat.regenerateMessage")}
+                            className="ml-1 flex h-6 w-6 items-center justify-center rounded border border-[#333] bg-[#1c1c1c] text-[#a18d6f] transition-colors hover:border-[#806d58] hover:text-[#f4b85e]"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        )}
+                      </div>
+                      {!isError && (message.parsedContent?.usage || message.parsedContent?.modelName) && (
+                        <div className={`mb-3 flex flex-wrap items-center gap-x-1.5 pl-10 text-[11px] leading-5 text-[#8a8177] ${fontClass}`}>
+                          {message.parsedContent?.modelName && <span className="font-mono text-[#b79b72]">{message.parsedContent.modelName}</span>}
+                          {message.parsedContent?.modelName && message.parsedContent?.usage && <span aria-hidden="true">·</span>}
+                          {message.parsedContent?.usage && <span>{formatResponseMeta(message.parsedContent.usage)}</span>}
+                        </div>
+                      )}
+                      {isError ? (
+                        <div className="pl-10">
+                          <div className="rounded-lg border border-[#8c4747] bg-[rgba(58,31,31,0.72)] px-4 py-3 text-sm leading-6 text-[#f4d7d7]">
+                            {message.content}
+                            <div className="mt-2 text-[11px] text-[#c9a7a7]">{t("characterChat.errorRetryHint") || "Use retry to try this request again."}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <ChatHtmlBubble
+                          html={message.content}
+                          isLoading={isSending && message.content.trim() === ""}
+                          enableStreaming={false}
+                          onContentChange={index === messages.length - 1 ? maybeScrollToBottom : undefined}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+                {isSending && (
+                  <div className="mb-8 flex min-h-[40px] items-center gap-2 pb-4 pt-2 text-[#c0a480]">
+                    <div className="relative h-6 w-6">
+                      <span className="absolute inset-0 animate-spin rounded-full border-2 border-b-[#a18d6f] border-l-transparent border-r-[#c0a480] border-t-[#f9c86d]" />
+                    </div>
+                    <span className={`text-sm ${serifFontClass}`}>{character.name} {t("characterChat.isTyping") || "is typing..."}</span>
                   </div>
-                  <span className={`text-sm ${serifFontClass}`}>
-                    {character.name} {t("characterChat.isTyping") || "is typing..."}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
+        {showScrollToBottom && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom("smooth")}
+            title={t("characterChat.scrollToBottom")}
+            aria-label={t("characterChat.scrollToBottom")}
+            className="absolute bottom-4 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-[#6a5948] bg-[#24201d]/95 text-[#d8b979] shadow-lg transition-colors hover:border-[#c49752] hover:bg-[#302a24]"
+          >
+            <ArrowDown size={17} />
+          </button>
+        )}
       </div>
 
-      <div className="sticky bottom-0 bg-[#1a1816] border-t border-[#534741] pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] px-3 sm:pt-6 sm:pb-6 sm:px-5 z-5 mt-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.2)]">
+      <div className="z-5 shrink-0 border-t border-[#534741] bg-[#1a1816] px-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.2)] sm:px-5 sm:pb-6 sm:pt-6">
         {suggestedInputs.length > 0 && !isSending && (
-          <div className="relative max-w-4xl mx-auto">
+          <div className="relative mx-auto max-w-4xl">
             <button
-              onClick={() => setSuggestionsCollapsed(!suggestionsCollapsed)}
-              className="absolute -top-10 right-0 bg-[#2a261f] hover:bg-[#342f25] text-[#c0a480] hover:text-[#f4e8c1] p-1.5 rounded-md border border-[#534741] hover:border-[#a18d6f] transition-all duration-300 shadow-sm hover:shadow z-10"
-              aria-label={suggestionsCollapsed ? "展开建议" : "收起建议"}
+              type="button"
+              onClick={() => setSuggestionsCollapsed((collapsed) => !collapsed)}
+              className="absolute -top-10 right-0 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-[#534741] bg-[#2a261f] text-[#c0a480] hover:border-[#a18d6f] hover:text-[#f4e8c1]"
+              aria-label={t(suggestionsCollapsed ? "characterChat.expandSuggestions" : "characterChat.collapseSuggestions")}
             >
-              {suggestionsCollapsed ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
-                </svg>
-              )}
+              {suggestionsCollapsed ? <ChevronRight className="rotate-90" size={15} /> : <ChevronLeft className="-rotate-90" size={15} />}
             </button>
-            
-            <div  
-              className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                suggestionsCollapsed 
-                  ? "max-h-0 opacity-0 mb-0" 
-                  : "max-h-40 opacity-100 mb-6"
-              }`}
-            >
-              <div className="flex flex-wrap gap-2">
+            {!suggestionsCollapsed && (
+              <div className="mb-6 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
                 {suggestedInputs.map((input, index) => (
                   <button
-                    key={index}
-                    onClick={() => {
-                      trackButtonClick("page", "建议输入");
-                      onSuggestedInput(input);
-                    }}
+                    type="button"
+                    key={`${input}-${index}`}
+                    onClick={() => { trackButtonClick("page", "建议输入"); onSuggestedInput(input); }}
                     disabled={isSending}
-                    className={`bg-[#2a261f] hover:bg-[#342f25] text-[#c0a480] hover:text-[#f4e8c1] py-1.5 px-4 rounded-md text-xs border border-[#534741] hover:border-[#a18d6f] transition-all duration-300 shadow-sm hover:shadow menu-item ${
-                      isSending ? "opacity-50 cursor-not-allowed" : ""
-                    } ${fontClass}`}
+                    className={`rounded-md border border-[#534741] bg-[#2a261f] px-4 py-1.5 text-xs text-[#c0a480] transition-colors hover:border-[#a18d6f] hover:bg-[#342f25] hover:text-[#f4e8c1] disabled:opacity-50 ${fontClass}`}
                   >
                     {input}
                   </button>
                 ))}
               </div>
-            </div>
-          </div>
-        )}
-        <form
-          onSubmit={(event) => {
-            trackFormSubmit("page", "提交表单");
-            onSubmit(event);
-          }}
-          className="max-w-4xl mx-auto"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="flex-grow magical-input relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-400/20 via-amber-500/5 to-amber-400/10 rounded-lg blur opacity-0 group-hover:opacity-100 transition duration-300"></div>
-              <input
-                type="text"
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                placeholder={t("characterChat.typeMessage") || "Type a message..."}
-                data-tour="chat-input"
-                className="w-full bg-[#2a261f] border border-[#534741] rounded-lg py-3 sm:py-2.5 px-4 text-[#f4e8c1] text-base sm:text-sm leading-tight focus:outline-none focus:border-[#c0a480] shadow-inner relative z-1 transition-all duration-300 group-hover:border-[#a18d6f]"
-                disabled={isSending}
-              />
-            </div>
-            {isSending ? (
-              <div className="relative w-8 h-8 flex items-center justify-center self-end sm:self-auto">
-                <div className="absolute inset-0 rounded-full border-2 border-t-[#f9c86d] border-r-[#c0a480] border-b-[#a18d6f] border-l-transparent animate-spin"></div>
-                <div className="absolute inset-1 rounded-full border-2 border-t-[#a18d6f] border-r-[#f9c86d] border-b-[#c0a480] border-l-transparent animate-spin-slow"></div>
-              </div>
-            ) : (
-              <button
-                type="submit"
-                disabled={!userInput.trim()}
-                className={`portal-button relative overflow-hidden w-full sm:w-auto bg-[#2a261f] hover:bg-[#342f25] text-[#c0a480] hover:text-[#f4e8c1] py-3 sm:py-2 px-4 rounded-lg text-sm border border-[#534741] hover:border-[#a18d6f] shadow-md transition-all duration-300 ${
-                  !userInput.trim() ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-              >
-                {t("characterChat.send") || "Send"}
-              </button>
             )}
           </div>
-
-          <div className="mt-4 flex flex-wrap justify-start gap-2 sm:gap-3 max-w-4xl mx-auto">
-            <button
-              type="button"
-              onClick={() => {
-                trackButtonClick("page", "切换故事进度");
-                setActiveModes((prev) => ({
-                  ...prev,
-                  "story-progress": !prev["story-progress"],
-                }));
-              }}
-              className={`px-3 sm:px-4 py-1.5 text-xs rounded-full border transition-all duration-300 ${
-                activeModes["story-progress"]
-                  ? "bg-[#d1a35c] text-[#2a261f] border-[#d1a35c] shadow-[0_0_8px_rgba(209,163,92,0.5)]"
-                  : "bg-[#2a261f] text-[#d1a35c] border-[#534741] hover:border-[#d1a35c] shadow-sm hover:shadow-md"
-              }`}
-            >
-              <span className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mr-1"
-                >
-                  <path d="M5 12h14"></path>
-                  <path d="m12 5 7 7-7 7"></path>
-                </svg>
-                {t("characterChat.storyProgress") || "剧情推进"}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                trackButtonClick("page", "切换视角");
-                setActiveModes((prev) => {
-                  const perspective = prev["perspective"];
-
-                  if (!perspective.active) {
-                    return {
-                      ...prev,
-                      perspective: {
-                        active: true,
-                        mode: "novel",
-                      },
-                    };
+        )}
+        <form onSubmit={(event) => { trackFormSubmit("page", "提交表单"); onSubmit(event); }} className="mx-auto max-w-4xl">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-grow">
+              <textarea
+                value={userInput}
+                onChange={(event) => setUserInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
                   }
+                }}
+                placeholder={t("characterChat.typeMessage") || "Type a message..."}
+                rows={1}
+                disabled={isSending}
+                className="max-h-40 min-h-[2.75rem] w-full resize-y rounded-lg border border-[#534741] bg-[#2a261f] px-4 py-3 text-base leading-6 text-[#f4e8c1] shadow-inner outline-none transition-colors focus:border-[#c0a480] sm:text-sm"
+              />
+            </div>
+            <div className="flex shrink-0 items-center justify-end gap-2 self-end sm:self-auto">
+              <div role="img" title={contextLabel} aria-label={contextLabel} className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#534741] bg-[#211e1b] shadow-inner">
+                <span className="absolute inset-[5px] rounded-full" style={{ background: `conic-gradient(#d2a75d ${contextPercentage}%, #4d443a ${contextPercentage}% 100%)` }} />
+                <span className="absolute inset-[8px] rounded-full bg-[#211e1b]" />
+                <span className="relative text-[8px] font-medium tabular-nums text-[#d8c39d]">{Math.round(contextPercentage)}</span>
+              </div>
+              {isSending ? (
+                <button type="button" onClick={onStop} title={t("characterChat.stopGeneration")} aria-label={t("characterChat.stopGeneration")} className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-[#6a5948] bg-[#2a261f] text-[#f0c979] hover:border-[#c49752] hover:bg-[#342f25]">
+                  <span className="absolute inset-1 animate-spin rounded-full border-2 border-b-[#a18d6f] border-l-transparent border-r-[#c0a480] border-t-[#f9c86d]" />
+                  <Square size={12} className="relative fill-current" />
+                </button>
+              ) : (
+                <button type="submit" disabled={!userInput.trim()} title={t("characterChat.send")} aria-label={t("characterChat.send")} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#534741] bg-[#2a261f] text-[#c0a480] hover:border-[#a18d6f] hover:text-[#f4e8c1] disabled:cursor-not-allowed disabled:opacity-40">
+                  <Send size={16} />
+                </button>
+              )}
+            </div>
+          </div>
 
-                  if (perspective.mode === "novel") {
-                    return {
-                      ...prev,
-                      perspective: {
-                        active: true,
-                        mode: "protagonist",
-                      },
-                    };
-                  }
-
-                  return {
-                    ...prev,
-                    perspective: {
-                      active: false,
-                      mode: "novel",
-                    },
-                  };
-                });
-              }}
-              className={`px-4 py-1.5 text-xs rounded-full border transition-all duration-300 ${
-                !activeModes["perspective"].active
-                  ? "bg-[#2a261f] text-[#56b3b4] border-[#534741] hover:border-[#56b3b4] shadow-sm hover:shadow-md"
-                  : activeModes["perspective"].mode === "novel"
-                    ? "bg-[#56b3b4] text-[#2a261f] border-[#56b3b4] shadow-[0_0_8px_rgba(86,179,180,0.5)]"
-                    : "bg-[#378384] text-[#2a261f] border-[#378384] shadow-[0_0_8px_rgba(55,131,132,0.5)]"
-              }`}
-            >
-              <span className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mr-1"
-                >
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="2" y1="12" x2="22" y2="12"></line>
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                </svg>
-                {!activeModes["perspective"].active
-                  ? t("characterChat.perspective") || "视角设计"
-                  : activeModes["perspective"].mode === "novel"
-                    ? t("characterChat.novelPerspective") || "小说视角"
-                    : t("characterChat.protagonistPerspective") || "主角视角"}
-              </span>
+          <div className="mt-4 flex max-w-4xl flex-wrap justify-start gap-2 sm:gap-3">
+            <button type="button" onClick={() => { trackButtonClick("page", "切换故事进度"); setActiveModes((prev) => ({ ...prev, "story-progress": !prev["story-progress"] })); }} className={`rounded-full border px-3 py-1.5 text-xs transition-colors sm:px-4 ${activeModes["story-progress"] ? "border-[#d1a35c] bg-[#d1a35c] text-[#2a261f]" : "border-[#534741] bg-[#2a261f] text-[#d1a35c] hover:border-[#d1a35c]"}`}>
+              {t("characterChat.storyProgress") || "剧情推进"}
             </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                trackButtonClick("page", "切换场景设置");
-                setActiveModes((prev) => ({
-                  ...prev,
-                  "scene-setting": !prev["scene-setting"],
-                }));
-              }}
-              className={`px-4 py-1.5 text-xs rounded-full border transition-all duration-300 ${
-                activeModes["scene-setting"]
-                  ? "bg-[#c093ff] text-[#2a261f] border-[#c093ff] shadow-[0_0_8px_rgba(192,147,255,0.5)]"
-                  : "bg-[#2a261f] text-[#c093ff] border-[#534741] hover:border-[#c093ff] shadow-sm hover:shadow-md"
-              }`}
-            >
-              <span className="flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mr-1"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="3" y1="9" x2="21" y2="9"></line>
-                  <line x1="3" y1="15" x2="21" y2="15"></line>
-                  <line x1="9" y1="3" x2="9" y2="21"></line>
-                  <line x1="15" y1="3" x2="15" y2="21"></line>
-                </svg>
-                {t("characterChat.sceneTransition")}
-              </span>
+            <button type="button" onClick={() => setActiveModes((prev) => {
+              if (!prev.perspective.active) return { ...prev, perspective: { active: true, mode: "novel" } };
+              if (prev.perspective.mode === "novel") return { ...prev, perspective: { active: true, mode: "protagonist" } };
+              return { ...prev, perspective: { active: false, mode: "novel" } };
+            })} className={`rounded-full border px-3 py-1.5 text-xs transition-colors sm:px-4 ${!activeModes.perspective.active ? "border-[#534741] bg-[#2a261f] text-[#56b3b4] hover:border-[#56b3b4]" : "border-[#56b3b4] bg-[#56b3b4] text-[#2a261f]"}`}>
+              {!activeModes.perspective.active ? t("characterChat.perspective") : activeModes.perspective.mode === "novel" ? t("characterChat.novelPerspective") : t("characterChat.protagonistPerspective")}
+            </button>
+            <button type="button" onClick={() => { trackButtonClick("page", "切换场景设置"); setActiveModes((prev) => ({ ...prev, "scene-setting": !prev["scene-setting"] })); }} className={`rounded-full border px-3 py-1.5 text-xs transition-colors sm:px-4 ${activeModes["scene-setting"] ? "border-[#c093ff] bg-[#c093ff] text-[#2a261f]" : "border-[#534741] bg-[#2a261f] text-[#c093ff] hover:border-[#c093ff]"}`}>
+              {t("characterChat.sceneTransition")}
             </button>
           </div>
         </form>
