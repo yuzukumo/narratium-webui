@@ -831,7 +831,7 @@ export default function AdminPage() {
                         </div>
 					  </td>
 					  <td className="px-3 py-3 tabular-nums text-[#d8c9b3]">
-                            <span className="block">{model.capabilities.context_window ? new Intl.NumberFormat().format(model.capabilities.context_window) : "—"}</span>
+                        <span className="block">{model.capabilities.context_window ? new Intl.NumberFormat().format(model.capabilities.context_window) : "—"}</span>
                         <span className="mt-0.5 block text-[11px] text-[#817361]">
                           {t("admin.models.compactionShort")} {model.capabilities.compaction_threshold ? new Intl.NumberFormat().format(model.capabilities.compaction_threshold) : "—"}
                         </span>
