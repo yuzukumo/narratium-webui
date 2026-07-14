@@ -10,16 +10,17 @@ export async function getCharacterDialogue(characterId: string, language: Langua
   }
 
   try {
-    const characterRecord = await LocalCharacterRecordOperations.getCharacterById(characterId);
+    const [characterRecord, dialogueTree] = await Promise.all([
+      LocalCharacterRecordOperations.getCharacterById(characterId),
+      LocalCharacterDialogueOperations.getDialogueTreeById(characterId),
+    ]);
     const character = new Character(characterRecord);
-
-    const dialogueTree = await LocalCharacterDialogueOperations.getDialogueTreeById(characterId);
 
     let processedDialogue = null;
 
     if (dialogueTree) {
       const currentPath = dialogueTree.current_node_id !== "root"
-        ? await LocalCharacterDialogueOperations.getDialoguePathToNode(characterId, dialogueTree.current_node_id)
+        ? LocalCharacterDialogueOperations.getDialoguePath(dialogueTree, dialogueTree.current_node_id)
         : [];
 
       processedDialogue = processedDialogueView(dialogueTree, currentPath);
@@ -31,6 +32,7 @@ export async function getCharacterDialogue(characterId: string, language: Langua
         id: character.id,
         data: character.getData(language),
         imagePath: character.imagePath,
+        thumbnailPath: character.thumbnailPath,
         protagonistName: character.protagonistName,
       },
       dialogue: processedDialogue,

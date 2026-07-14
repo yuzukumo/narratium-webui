@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import {
   useCallback,
@@ -20,8 +21,9 @@ import {
 import { toast } from "react-hot-toast";
 import { useLanguage } from "@/app/i18n";
 import { useAuth } from "@/contexts/AuthContext";
-import UserSettingsModal from "@/components/UserSettingsModal";
 import UserAvatar from "@/components/UserAvatar";
+
+const UserSettingsModal = dynamic(() => import("@/components/UserSettingsModal"));
 
 export interface UserMenuProps {
   compact?: boolean;
@@ -319,7 +321,7 @@ export default function UserMenu({
       </div>
 
       {menu}
-      <UserSettingsModal isOpen={settingsOpen} onClose={closeSettings} />
+      {settingsOpen && <UserSettingsModal isOpen onClose={closeSettings} />}
     </>
   );
 }

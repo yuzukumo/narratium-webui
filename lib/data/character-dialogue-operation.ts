@@ -102,6 +102,62 @@ export class LocalCharacterDialogueOperations {
     throw new Error(`Unable to persist dialogue node: ${nodeId}`);
   }
 
+  static async upsertNodeToDialogueTree(
+    dialogueId: string,
+    parentNodeId: string,
+    userInput: string,
+    assistantResponse: string,
+    fullResponse: string,
+    parsedContent?: ParsedResponse,
+    nodeId?: string,
+  ): Promise<string> {
+    const resolvedNodeId = nodeId || uuidv4();
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
+      const index = dialogues.findIndex((d: any) => d.id === dialogueId);
+      if (index === -1) {
+        throw new Error(`Dialogue tree not found: ${dialogueId}`);
+      }
+
+      const nodes = Array.isArray(dialogues[index].nodes) ? dialogues[index].nodes : [];
+      const existingIndex = nodes.findIndex((node: any) => node.node_id === resolvedNodeId);
+      if (existingIndex >= 0) {
+        const existing = nodes[existingIndex];
+        nodes[existingIndex] = {
+          ...existing,
+          node_id: resolvedNodeId,
+          parent_node_id: parentNodeId,
+          user_input: userInput,
+          assistant_response: assistantResponse,
+          full_response: fullResponse,
+          ...(parsedContent !== undefined ? { parsed_content: parsedContent } : {}),
+        };
+      } else {
+        nodes.push(new DialogueNode(
+          resolvedNodeId,
+          parentNodeId,
+          userInput,
+          assistantResponse,
+          fullResponse,
+          parsedContent,
+        ));
+      }
+      dialogues[index].nodes = nodes;
+      dialogues[index].current_node_id = resolvedNodeId;
+      dialogues[index].updated_at = new Date().toISOString();
+
+      try {
+        await writeData(CHARACTER_DIALOGUES_FILE, dialogues);
+        return resolvedNodeId;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+    }
+
+    throw new Error(`Unable to persist dialogue node: ${resolvedNodeId}`);
+  }
+
   static async updateDialogueTree(dialogueId: string, updatedDialogue: DialogueTree): Promise<boolean> {
     const dialogues = await readData(CHARACTER_DIALOGUES_FILE);
     const index = dialogues.findIndex((d: any) => d.id === dialogueId);
@@ -212,18 +268,24 @@ export class LocalCharacterDialogueOperations {
       return null;
     }
 
+    const childrenByParent = new Map<string, string[]>();
+    for (const node of dialogueTree.nodes) {
+      const children = childrenByParent.get(node.parent_node_id);
+      if (children) children.push(node.node_id);
+      else childrenByParent.set(node.parent_node_id, [node.node_id]);
+    }
     const nodesToDelete = new Set<string>();
-    const collectNodesToDelete = (currentNodeId: string) => {
+    const pending = [nodeId];
+    while (pending.length > 0) {
+      const currentNodeId = pending.pop() as string;
+      if (nodesToDelete.has(currentNodeId)) continue;
       nodesToDelete.add(currentNodeId);
-      const children = dialogueTree.nodes.filter(node => node.parent_node_id === currentNodeId);
-      children.forEach(child => collectNodesToDelete(child.node_id));
-    };
-    
-    collectNodesToDelete(nodeId);
+      pending.push(...(childrenByParent.get(currentNodeId) || []));
+    }
+
     dialogueTree.nodes = dialogueTree.nodes.filter(node => !nodesToDelete.has(node.node_id));
     if (nodesToDelete.has(dialogueTree.current_node_id)) {
       dialogueTree.current_node_id = nodeToDelete.parent_node_id;
-      const newCurrentNode = dialogueTree.nodes.find(node => node.node_id === dialogueTree.current_node_id);
     }
     
     dialogueTree.updated_at = new Date().toISOString();
@@ -240,20 +302,24 @@ export class LocalCharacterDialogueOperations {
       return [];
     }
     
-    const path: DialogueNode[] = [];
-    let currentNode = dialogueTree.nodes.find(node => node.node_id === nodeId);
-    
+    return this.getDialoguePath(dialogueTree, nodeId);
+  }
+
+  static getDialoguePath(dialogueTree: DialogueTree, nodeId: string): DialogueNode[] {
+    const nodesById = new Map(dialogueTree.nodes.map((node) => [node.node_id, node]));
+    const reversePath: DialogueNode[] = [];
+    const visited = new Set<string>();
+    let currentNode = nodesById.get(nodeId);
+
     while (currentNode) {
-      path.unshift(currentNode);
-      
-      if (currentNode.node_id === "root") {
-        break;
-      }
-      
-      currentNode = dialogueTree.nodes.find(node => node.node_id === currentNode?.parent_node_id);
+      if (visited.has(currentNode.node_id)) break;
+      visited.add(currentNode.node_id);
+      reversePath.push(currentNode);
+      if (currentNode.node_id === "root") break;
+      currentNode = nodesById.get(currentNode.parent_node_id);
     }
-    
-    return path;
+
+    return reversePath.reverse();
   }
 
   static async getChildNodes(dialogueId: string, parentNodeId: string): Promise<DialogueNode[]> {

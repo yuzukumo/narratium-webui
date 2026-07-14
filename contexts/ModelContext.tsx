@@ -33,11 +33,12 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
   const [models, setModels] = useState<AvailableModel[]>([]);
   const [activeModelId, setActiveModelId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState("");
   const modelsRef = useRef<AvailableModel[]>([]);
   const activeModelIdRef = useRef("");
   const activeCharacterIdRef = useRef("");
+  const loadedRef = useRef(false);
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
   const setActiveID = useCallback((id: string) => {
     activeModelIdRef.current = id;
@@ -54,45 +55,54 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
       || null;
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback((): Promise<void> => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+
     setLoading(true);
     setError("");
-    try {
-      const payload = await apiJSON<{ items: AvailableModel[] }>("/api/v1/models");
-      modelsRef.current = payload.items;
-      setModels(payload.items);
-      const selected = resolveCharacterModel(payload.items, activeCharacterIdRef.current);
-      setActiveID(selected?.id || "");
-      if (selected && activeCharacterIdRef.current) {
-        window.localStorage.setItem(
-          characterModelPreferenceKey(activeCharacterIdRef.current),
-          selected.id,
-        );
+    const request = (async () => {
+      try {
+        const payload = await apiJSON<{ items: AvailableModel[] }>("/api/v1/models");
+        modelsRef.current = payload.items;
+        setModels(payload.items);
+        const selected = resolveCharacterModel(payload.items, activeCharacterIdRef.current);
+        setActiveID(selected?.id || "");
+        if (selected && activeCharacterIdRef.current) {
+          window.localStorage.setItem(
+            characterModelPreferenceKey(activeCharacterIdRef.current),
+            selected.id,
+          );
+        }
+        window.localStorage.removeItem("activeModelId");
+        window.localStorage.removeItem("reasoningEffortEnabled");
+        window.localStorage.removeItem("reasoningEffort");
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Unable to load models.");
+      } finally {
+        loadedRef.current = true;
+        setLoading(false);
       }
-      window.localStorage.removeItem("activeModelId");
-      window.localStorage.removeItem("reasoningEffortEnabled");
-      window.localStorage.removeItem("reasoningEffort");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load models.");
-    } finally {
-      setLoading(false);
-      setInitialized(true);
-    }
+    })();
+    refreshPromiseRef.current = request;
+    void request.finally(() => {
+      if (refreshPromiseRef.current === request) refreshPromiseRef.current = null;
+    });
+    return request;
   }, [resolveCharacterModel, setActiveID]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   const activateCharacter = useCallback((characterId: string) => {
     const normalizedID = characterId.trim();
     activeCharacterIdRef.current = normalizedID;
+    if (!loadedRef.current) {
+      void refresh();
+      return;
+    }
     const selected = resolveCharacterModel(modelsRef.current, normalizedID);
     setActiveID(selected?.id || "");
     if (selected && normalizedID) {
       window.localStorage.setItem(characterModelPreferenceKey(normalizedID), selected.id);
     }
-  }, [resolveCharacterModel, setActiveID]);
+  }, [refresh, resolveCharacterModel, setActiveID]);
 
   const selectModel = useCallback((id: string) => {
     if (!modelsRef.current.some((model) => model.id === id)) {
@@ -136,17 +146,6 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     selectModel,
     refresh,
   }), [activeModel, activateCharacter, error, loading, models, refresh, selectModel]);
-
-  if (!initialized) {
-    return (
-      <div className="flex h-full items-center justify-center bg-gradient-to-b from-[#1a1816] to-[#211e1c]" aria-busy="true">
-        <div className="relative h-12 w-12">
-          <div className="absolute inset-0 animate-spin rounded-full border-2 border-b-[#a18d6f] border-l-transparent border-r-[#c0a480] border-t-[#f9c86d]" />
-          <div className="animate-spin-slow absolute inset-2 rounded-full border-2 border-b-[#c0a480] border-l-[#a18d6f] border-r-transparent border-t-[#f9c86d]" />
-        </div>
-      </div>
-    );
-  }
 
   return <ModelContext.Provider value={value}>{children}</ModelContext.Provider>;
 }

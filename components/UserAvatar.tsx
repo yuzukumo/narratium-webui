@@ -1,46 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
-import { getBlob } from "@/lib/data/local-storage";
+import { invalidateBlobUrl, useBlobUrl } from "@/lib/data/blob-url-cache";
 
 export const USER_AVATAR_KEY = "profile/avatar";
 export const USER_AVATAR_CHANGED_EVENT = "narratium:user-avatar-changed";
 
-export default function UserAvatar({ className = "", iconSize = 17 }: { className?: string; iconSize?: number }) {
-  const [source, setSource] = useState<string | null>(null);
+const UserAvatar = memo(function UserAvatar({ className = "", iconSize = 17 }: { className?: string; iconSize?: number }) {
+  const [refreshToken, setRefreshToken] = useState(0);
+  const source = useBlobUrl(USER_AVATAR_KEY, refreshToken);
 
   useEffect(() => {
-    let objectURL = "";
-    let disposed = false;
-    const load = async () => {
-      try {
-        const blob = await getBlob(USER_AVATAR_KEY);
-        if (disposed) return;
-        if (objectURL) URL.revokeObjectURL(objectURL);
-        if (!blob) {
-          objectURL = "";
-          setSource(null);
-          return;
-        }
-        objectURL = URL.createObjectURL(blob);
-        setSource(objectURL);
-      } catch {
-        if (!disposed) setSource(null);
-      }
+    const handleAvatarChanged = () => {
+      invalidateBlobUrl(USER_AVATAR_KEY);
+      setRefreshToken((token) => token + 1);
     };
-    void load();
-    window.addEventListener(USER_AVATAR_CHANGED_EVENT, load);
+
+    window.addEventListener(USER_AVATAR_CHANGED_EVENT, handleAvatarChanged);
     return () => {
-      disposed = true;
-      window.removeEventListener(USER_AVATAR_CHANGED_EVENT, load);
-      if (objectURL) URL.revokeObjectURL(objectURL);
+      window.removeEventListener(USER_AVATAR_CHANGED_EVENT, handleAvatarChanged);
     };
   }, []);
 
   return source ? (
-    <img src={source} alt="" className={`h-full w-full object-cover ${className}`} />
+    <img src={source} alt="" loading="lazy" decoding="async" className={`h-full w-full object-cover ${className}`} />
   ) : (
     <UserRound size={iconSize} className={className} />
   );
-}
+});
+
+export default UserAvatar;

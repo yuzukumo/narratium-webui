@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/app/i18n";
 import Link from "next/link";
-import DialogueTreeModal from "@/components/DialogueTreeModal";
 import { trackButtonClick } from "@/utils/google-analytics";
 import { CharacterAvatarBackground } from "@/components/CharacterAvatarBackground";
-import AdvancedSettingsEditor from "@/components/AdvancedSettingsEditor";
 import {
   DEFAULT_RESPONSE_LENGTH,
   getStoredResponseLength,
   persistResponseLength,
 } from "@/utils/api-config";
+import { MOBILE_VIEWPORT_QUERY, useMediaQuery } from "@/lib/browser/use-media-query";
+
+const DialogueTreeModal = dynamic(() => import("@/components/DialogueTreeModal"));
+const AdvancedSettingsEditor = dynamic(() => import("@/components/AdvancedSettingsEditor"));
 
 interface CharacterSidebarProps {
   character: {
@@ -54,7 +57,7 @@ const CharacterSidebar: React.FC<CharacterSidebarProps> = ({
   }, []);
 
   const [showDialogueTreeModal, setShowDialogueTreeModal] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useMediaQuery(MOBILE_VIEWPORT_QUERY) === true;
   
   const handleResponseLengthChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value;
@@ -102,17 +105,6 @@ const CharacterSidebar: React.FC<CharacterSidebarProps> = ({
     }
   };
   
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
   const mobileSidebarClass = isMobile
     ? (isCollapsed
       ? "hidden"
@@ -403,18 +395,22 @@ const CharacterSidebar: React.FC<CharacterSidebarProps> = ({
         </div>
       </div>
       
-      <DialogueTreeModal
-        isOpen={showDialogueTreeModal}
-        onClose={() => setShowDialogueTreeModal(false)}
-        characterId={character.id}
-        onDialogueEdit={onDialogueEdit}
-      />
+      {showDialogueTreeModal && (
+        <DialogueTreeModal
+          isOpen
+          onClose={() => setShowDialogueTreeModal(false)}
+          characterId={character.id}
+          onDialogueEdit={onDialogueEdit}
+        />
+      )}
 
-      <AdvancedSettingsEditor
-        isOpen={isAdvancedSettingsOpen}
-        onClose={() => setIsAdvancedSettingsOpen(false)}
-        onViewSwitch={onViewSwitch}
-      />
+      {isAdvancedSettingsOpen && (
+        <AdvancedSettingsEditor
+          isOpen
+          onClose={() => setIsAdvancedSettingsOpen(false)}
+          onViewSwitch={onViewSwitch}
+        />
+      )}
     </>
   );
 };

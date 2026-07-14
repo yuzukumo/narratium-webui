@@ -49,4 +49,7 @@ export interface ParsedResponse {
   modelId?: string;
   modelName?: string;
   contextSummary?: ContextSummarySnapshot;
+  generationStatus?: "pending" | "completed" | "failed" | "canceled";
+  errorCode?: string;
+  errorMessage?: string;
 }

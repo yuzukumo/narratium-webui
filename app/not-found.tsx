@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { useLanguage } from "./i18n";
 import "./styles/fantasy-ui.css";
 
@@ -13,7 +12,7 @@ export default function NotFound() {
       <div
         className="absolute inset-0 z-0 opacity-35"
         style={{
-          backgroundImage: "url('/background_yellow.png')",
+          backgroundImage: "url('/background_yellow.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -23,7 +22,7 @@ export default function NotFound() {
       <div
         className="absolute inset-0 z-1 opacity-45"
         style={{
-          backgroundImage: "url('/background_red.png')",
+          backgroundImage: "url('/background_red.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -55,11 +54,7 @@ export default function NotFound() {
       </div>
 
       <div className="relative z-10 w-full max-w-2xl px-6 py-12 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
+        <div className="ui-enter-down">
           <div className="mb-8 relative">
             <div className="relative mx-auto w-32 h-32 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-2 border-[#534741] opacity-20"></div>
@@ -82,20 +77,18 @@ export default function NotFound() {
 
           <div className="flex items-center justify-center space-x-4">
             <Link href="/">
-              <motion.div
-                className={`portal-button text-[#c0a480] hover:text-[#ffd475] px-4 py-2 text-sm border border-[#534741] rounded-md cursor-pointer ${fontClass}`}
-                whileHover={{ scale: 1.05 }}
-                transition={{ type: "spring", stiffness: 400, damping: 10 }}
+              <div
+                className={`portal-button text-[#c0a480] hover:text-[#ffd475] hover:scale-105 transition-transform px-4 py-2 text-sm border border-[#534741] rounded-md cursor-pointer ${fontClass}`}
               >
                 {t("notFound.backToHome")}
-              </motion.div>
+              </div>
             </Link>
             <span className="mx-1 text-[#534741]">•</span>
             <div className={`text-xs text-[#a18d6f] ${fontClass}`}>
               {t("notFound.exploreMore")}
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

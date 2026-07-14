@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLanguage } from "@/app/i18n";
 import { trackButtonClick } from "@/utils/google-analytics";
+import { MOBILE_VIEWPORT_QUERY, useMediaQuery } from "@/lib/browser/use-media-query";
 
 interface PromptEditorProps {
   isOpen: boolean;
@@ -39,18 +40,7 @@ const PromptEditor: React.FC<PromptEditorProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  const isMobile = useMediaQuery(MOBILE_VIEWPORT_QUERY) === true;
 
   useEffect(() => {
     if (isOpen) {

@@ -135,6 +135,22 @@ beforeEach(() => {
 });
 
 describe("backend document revisions", () => {
+  it("coalesces concurrent reads while returning independently mutable snapshots", async () => {
+    const { fetchMock } = installDataServer({
+      [CHARACTERS_RECORD_FILE]: { value: [{ id: "remote" }], revision: 2 },
+    });
+
+    const [first, second] = await Promise.all([
+      readData(CHARACTERS_RECORD_FILE),
+      readData(CHARACTERS_RECORD_FILE),
+    ]);
+    first.push({ id: "local" });
+
+    expect(second).toEqual([{ id: "remote" }]);
+    expect(fetchMock.mock.calls.filter((call) => (call[1]?.method || "GET") === "GET"))
+      .toHaveLength(1);
+  });
+
   it("keeps each concurrent edit bound to the revision it read", async () => {
     const { fetchMock } = installDataServer({
       [CHARACTERS_RECORD_FILE]: { value: [{ id: "remote" }], revision: 1 },

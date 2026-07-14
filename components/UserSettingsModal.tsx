@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useId, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   Check,
   ClipboardList,
@@ -11,8 +12,6 @@ import {
   SlidersHorizontal,
   Upload,
   WalletCards,
-  Volume2,
-  VolumeX,
   X,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -23,14 +22,21 @@ import {
   type Language,
   useLanguage,
 } from "@/app/i18n";
-import { useSoundContext } from "@/contexts/SoundContext";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
-import UsageLogPanel from "@/components/UsageLogPanel";
 import UserAvatar, { USER_AVATAR_CHANGED_EVENT, USER_AVATAR_KEY } from "@/components/UserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { setBlob } from "@/lib/data/local-storage";
+import { createImageThumbnail } from "@/lib/media/image-thumbnail";
 import { formatMicrousd } from "@/utils/money";
 import { apiJSON, type AuthUser } from "@/utils/api-client";
+
+const UsageLogPanel = dynamic(() => import("@/components/UsageLogPanel"), {
+  loading: () => (
+    <div className="flex min-h-48 items-center justify-center" aria-busy="true">
+      <span className="h-6 w-6 animate-spin rounded-full border-2 border-[#665442] border-t-[#e0b766]" />
+    </div>
+  ),
+});
 
 export interface UserSettingsModalProps {
   isOpen: boolean;
@@ -55,7 +61,6 @@ export default function UserSettingsModal({ isOpen, onClose }: UserSettingsModal
     fontClass,
     serifFontClass,
   } = useLanguage();
-  const { soundEnabled, toggleSound } = useSoundContext();
   const { user, refresh } = useAuth();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -130,17 +135,10 @@ export default function UserSettingsModal({ isOpen, onClose }: UserSettingsModal
     };
   }, [isOpen]);
 
-  const handleSoundToggle = () => {
-    const nextEnabled = !soundEnabled;
-    toggleSound();
-    toast.success(t(nextEnabled ? "notifications.soundEnabled" : "notifications.soundDisabled"));
-  };
-
   if (!mounted || !isOpen) {
     return null;
   }
 
-  const switchClass = (enabled: boolean) => `relative h-7 w-12 shrink-0 rounded-full border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-500/30 ${enabled ? "border-amber-500/50 bg-[#8b642f]" : "border-[#625343] bg-[#27231f]"}`;
   const languageOptions: readonly SelectMenuOption<Language>[] = LANGUAGES.map((value) => ({
     value,
     label: LANGUAGE_NATIVE_NAMES[value],
@@ -159,7 +157,8 @@ export default function UserSettingsModal({ isOpen, onClose }: UserSettingsModal
     }
     setUploadingAvatar(true);
     try {
-      await setBlob(USER_AVATAR_KEY, file);
+      const avatar = await createImageThumbnail(file, 384, 0.86);
+      await setBlob(USER_AVATAR_KEY, avatar);
       window.dispatchEvent(new Event(USER_AVATAR_CHANGED_EVENT));
       toast.success(t("settings.general.avatarSaved"));
     } catch (error) {
@@ -350,34 +349,6 @@ export default function UserSettingsModal({ isOpen, onClose }: UserSettingsModal
                     ariaLabel={t("settings.general.language")}
                     className="w-full sm:w-60"
                   />
-                </div>
-
-                <div className="flex items-center justify-between gap-4 py-4">
-                  <div className="flex min-w-0 items-center gap-3">
-                    {soundEnabled ? (
-                      <Volume2 size={18} className="shrink-0 text-[#c89b55]" />
-                    ) : (
-                      <VolumeX size={18} className="shrink-0 text-[#8f806d]" />
-                    )}
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm text-[#eae0ce]">
-                        {t("settings.general.sound")}
-                      </span>
-                      <span className="block truncate text-xs text-[#8f806d]">
-                        {t(soundEnabled ? "settings.general.soundOn" : "settings.general.soundOff")}
-                      </span>
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={soundEnabled}
-                    aria-label={t("settings.general.sound")}
-                    onClick={handleSoundToggle}
-                    className={switchClass(soundEnabled)}
-                  >
-                    <span className={`absolute left-0 top-1 h-[1.125rem] w-[1.125rem] rounded-full bg-[#f5e4c0] shadow-sm transition-transform ${soundEnabled ? "translate-x-6" : "translate-x-1"}`} />
-                  </button>
                 </div>
 
               </div>

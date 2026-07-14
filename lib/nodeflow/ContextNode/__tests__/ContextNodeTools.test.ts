@@ -4,12 +4,14 @@ import type { ContextSummarySnapshot } from "@/lib/models/parsed-response";
 
 const {
   getDialogueTreeById,
+  getDialoguePath,
   getDialoguePathToNode,
   updateNodeInDialogueTree,
   invokePersistentLLM,
   acknowledgePersistentLLMRuns,
 } = vi.hoisted(() => ({
   getDialogueTreeById: vi.fn(),
+  getDialoguePath: vi.fn(),
   getDialoguePathToNode: vi.fn(),
   updateNodeInDialogueTree: vi.fn(),
   invokePersistentLLM: vi.fn(),
@@ -19,6 +21,7 @@ const {
 vi.mock("@/lib/data/character-dialogue-operation", () => ({
   LocalCharacterDialogueOperations: {
     getDialogueTreeById,
+    getDialoguePath,
     getDialoguePathToNode,
     updateNodeInDialogueTree,
   },
@@ -111,6 +114,10 @@ function setActivePath(turns: DialogueNode[]): void {
     turns.at(-1)?.node_id || "root",
   ));
   getDialoguePathToNode.mockImplementation(async (_characterId: string, nodeId: string) => {
+    const index = path.findIndex((node) => node.node_id === nodeId);
+    return index >= 0 ? path.slice(0, index + 1) : [];
+  });
+  getDialoguePath.mockImplementation((_tree: DialogueTree, nodeId: string) => {
     const index = path.findIndex((node) => node.node_id === nodeId);
     return index >= 0 ? path.slice(0, index + 1) : [];
   });

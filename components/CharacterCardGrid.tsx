@@ -16,7 +16,6 @@
  * - Responsive design adaptation
  * 
  * Dependencies:
- * - framer-motion: For animations
  * - CharacterAvatarBackground: For avatar display
  * - useLanguage: For internationalization
  */
@@ -24,7 +23,6 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { useLanguage } from "@/app/i18n";
 import { CharacterAvatarBackground } from "@/components/CharacterAvatarBackground";
 import { trackButtonClick } from "@/utils/google-analytics";
@@ -68,19 +66,14 @@ const CharacterCardGrid: React.FC<CharacterCardGridProps> = ({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5, staggerChildren: 0.1 }}
-      className="grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-2 lg:grid-cols-3"
+    <div
+      className="ui-fade-in grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-2 lg:grid-cols-3"
     >
       {characters.map((character, index) => (
-        <motion.div
+        <div
           key={character.id}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: index * 0.05 }}
-          className="w-full min-w-0 max-w-[240px]"
+          style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
+          className="ui-enter-up large-list-row w-full min-w-0 max-w-[240px]"
         >
           <div className="relative h-full overflow-hidden rounded-md border border-[#534741]/55 bg-[#241f1b]/65 transition-colors duration-200 hover:border-[#81684d]">
             {/* Action buttons for each card */}
@@ -164,9 +157,9 @@ const CharacterCardGrid: React.FC<CharacterCardGridProps> = ({
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       ))}
-    </motion.div>
+    </div>
   );
 };
 

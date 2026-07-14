@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useLanguage } from "@/app/i18n";
 import { RegexScript, RegexScriptSettings } from "@/lib/models/regex-script-model";
 import { trackButtonClick } from "@/utils/google-analytics";
-import RegexScriptEntryEditor from "@/components/RegexScriptEntryEditor";
-import ImportRegexScriptModal from "@/components/ImportRegexScriptModal";
 import { updateRegexScriptSettings } from "@/function/regex/update-setting";
 import { getRegexScripts } from "@/function/regex/get";
 import { getRegexScriptSettings } from "@/function/regex/get-setting";
 import { addRegexScript } from "@/function/regex/add";
 import { updateRegexScript } from "@/function/regex/update";
 import { deleteRegexScript } from "@/function/regex/delete";
+
+const RegexScriptEntryEditor = dynamic(() => import("@/components/RegexScriptEntryEditor"));
+const ImportRegexScriptModal = dynamic(() => import("@/components/ImportRegexScriptModal"));
 
 interface Props {
   onClose: () => void;
@@ -208,8 +210,18 @@ export default function RegexScriptEditor({ onClose, characterName, characterId 
     return sorted;
   };
 
-  const filteredScripts = filterScripts(scripts, filterBy);
-  const sortedScripts = sortScripts(filteredScripts, sortBy, sortOrder);
+  const filteredScripts = useMemo(
+    () => filterScripts(scripts, filterBy),
+    [scripts, filterBy],
+  );
+  const sortedScripts = useMemo(
+    () => sortScripts(filteredScripts, sortBy, sortOrder),
+    [filteredScripts, sortBy, sortOrder],
+  );
+  const scriptCounts = useMemo(() => Object.values(scripts).reduce((counts, script) => {
+    counts[script.disabled ? "disabled" : "enabled"] += 1;
+    return counts;
+  }, { enabled: 0, disabled: 0 }), [scripts]);
 
   const handleSortByChange = (newSortBy: string) => {
     setSortBy(newSortBy);
@@ -259,11 +271,11 @@ export default function RegexScriptEditor({ onClose, characterName, characterId 
               <span className="whitespace-nowrap">{t("regexScriptEditor.totalCount")} {Object.keys(scripts).length}</span>
               <span>•</span>
               <span className="text-amber-400 whitespace-nowrap">
-                {t("regexScriptEditor.enabledCount")} {Object.values(scripts).filter(s => !s.disabled).length}
+                {t("regexScriptEditor.enabledCount")} {scriptCounts.enabled}
               </span>
               <span>•</span>
               <span className="text-rose-400 whitespace-nowrap">
-                {t("regexScriptEditor.disabledCount")} {Object.values(scripts).filter(s => s.disabled).length}
+                {t("regexScriptEditor.disabledCount")} {scriptCounts.disabled}
               </span>
               {filterBy !== "all" && (
                 <>
@@ -276,7 +288,7 @@ export default function RegexScriptEditor({ onClose, characterName, characterId 
             </div>
             <div className={`md:hidden flex items-center space-x-1 text-xs text-[#a18d6f] ${serifFontClass} flex-shrink-0`}>
               <span className="bg-[#1a1816] px-2 py-1 rounded border border-[#534741] whitespace-nowrap">
-                {Object.keys(scripts).length} / {Object.values(scripts).filter(s => !s.disabled).length} / {Object.values(scripts).filter(s => s.disabled).length}
+                {scriptCounts.enabled + scriptCounts.disabled} / {scriptCounts.enabled} / {scriptCounts.disabled}
                 {filterBy !== "all" && ` (${filteredScripts.length})`}
               </span>
             </div>
@@ -464,7 +476,7 @@ export default function RegexScriptEditor({ onClose, characterName, characterId 
                 return (
                   <div
                     key={scriptId}
-                    className={`rounded-lg border transition-all duration-300 ${
+                    className={`large-list-row rounded-lg border transition-all duration-300 ${
                       script.disabled
                         ? "bg-[#1a1816] border-[#534741] opacity-60"
                         : "bg-[#1e1c1b] border-[#666]/30"
@@ -472,7 +484,7 @@ export default function RegexScriptEditor({ onClose, characterName, characterId 
                     style={{
                       opacity: animationComplete ? 1 : 0,
                       transform: animationComplete ? "translateY(0)" : "translateY(20px)",
-                      transitionDelay: `${index * 50}ms`,
+                      transitionDelay: `${Math.min(index, 8) * 40}ms`,
                     }}
                   >
                     <div className="p-4 border-b border-[#534741]/50">
@@ -627,24 +639,28 @@ export default function RegexScriptEditor({ onClose, characterName, characterId 
         </div>
       </div>
 
-      <RegexScriptEntryEditor
-        isOpen={editingScript !== null}
-        editingScript={editingScript}
-        isSaving={isSaving}
-        onClose={() => setEditingScript(null)}
-        onSave={handleSaveScript}
-        onScriptChange={(script) => setEditingScript(script)}
-      />
+      {editingScript !== null && (
+        <RegexScriptEntryEditor
+          isOpen
+          editingScript={editingScript}
+          isSaving={isSaving}
+          onClose={() => setEditingScript(null)}
+          onSave={handleSaveScript}
+          onScriptChange={(script) => setEditingScript(script)}
+        />
+      )}
 
-      <ImportRegexScriptModal
-        isOpen={isImportModalOpen}
-        characterId={characterId}
-        onClose={() => setIsImportModalOpen(false)}
-        onImportSuccess={() => {
-          setIsImportModalOpen(false);
-          loadScriptsAndSettings();
-        }}
-      />
+      {isImportModalOpen && (
+        <ImportRegexScriptModal
+          isOpen
+          characterId={characterId}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportSuccess={() => {
+            setIsImportModalOpen(false);
+            loadScriptsAndSettings();
+          }}
+        />
+      )}
     </div>
   );
 } 

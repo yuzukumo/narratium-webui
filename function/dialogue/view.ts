@@ -11,23 +11,24 @@ export interface DialogueViewMessage extends DialogueMessage {
   timestamp: string;
 }
 
-function alternativesForNode(tree: DialogueTree, node: DialogueNode): DialogueNode[] {
-  return tree.nodes.filter((candidate) => (
-    candidate.node_id !== "root"
-    && candidate.parent_node_id === node.parent_node_id
-  ));
-}
-
 export function dialoguePathToMessages(
   tree: DialogueTree,
   path: DialogueNode[],
 ): DialogueViewMessage[] {
+  const alternativesByParent = new Map<string, DialogueNode[]>();
+  for (const candidate of tree.nodes) {
+    if (candidate.node_id === "root") continue;
+    const siblings = alternativesByParent.get(candidate.parent_node_id);
+    if (siblings) siblings.push(candidate);
+    else alternativesByParent.set(candidate.parent_node_id, [candidate]);
+  }
+
   return path.flatMap((node) => {
     if (node.node_id === "root") {
       return [];
     }
 
-    const alternatives = alternativesForNode(tree, node);
+    const alternatives = alternativesByParent.get(node.parent_node_id) || [];
     const alternativeNodeIds = alternatives.map((candidate) => candidate.node_id);
     const alternativeIndex = Math.max(
       alternativeNodeIds.indexOf(node.node_id) + 1,
@@ -54,12 +55,21 @@ export function dialoguePathToMessages(
       });
     }
 
-    if (node.assistant_response) {
+    const generationStatus = node.parsed_content?.generationStatus;
+    const responseContent = node.parsed_content?.regexResult
+      || node.assistant_response
+      || node.parsed_content?.errorMessage
+      || "";
+    const hasResponseState = responseContent || (generationStatus && generationStatus !== "pending");
+
+    if (hasResponseState) {
       messages.push({
         ...metadata,
         id: `${node.node_id}:assistant`,
-        role: "assistant",
-        content: node.parsed_content?.regexResult || node.assistant_response,
+        role: generationStatus && generationStatus !== "completed" && !node.assistant_response
+          ? "error"
+          : "assistant",
+        content: responseContent,
         parsedContent: node.parsed_content,
       });
     }

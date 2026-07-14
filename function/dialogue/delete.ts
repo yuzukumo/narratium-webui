@@ -16,8 +16,8 @@ export async function deleteDialogueNode({ characterId, nodeId }: DeleteDialogue
 
     const currentPath =
       updatedDialogueTree.current_node_id !== "root"
-        ? await LocalCharacterDialogueOperations.getDialoguePathToNode(
-          characterId,
+        ? LocalCharacterDialogueOperations.getDialoguePath(
+          updatedDialogueTree,
           updatedDialogueTree.current_node_id,
         )
         : [];

@@ -9,6 +9,7 @@ import { RegexScriptOperations } from "@/lib/data/regex-script-operation";
 import { RegexScript } from "@/lib/models/regex-script-model";
 import { v4 as uuidv4 } from "uuid";
 import { embeddedRegexScripts, normalizeCharacterCard } from "@/lib/character-card/normalize";
+import { createImageThumbnail } from "@/lib/media/image-thumbnail";
 
 export async function handleCharacterUpload(
   file: File,
@@ -31,6 +32,10 @@ export async function handleCharacterUpload(
     const imagePath = bundle.image
       ? `${characterId}.${bundle.imageExtension || "bin"}`
       : "";
+    const thumbnail = bundle.image
+      ? await createImageThumbnail(bundle.image).catch(() => null)
+      : null;
+    const thumbnailPath = thumbnail ? `characters/${characterId}/thumbnail.webp` : "";
     const assetPaths = bundle.assets.map((asset, index) => {
       if (imagePath && asset.blob === bundle.image) return imagePath;
       const leaf = asset.sourcePath.split("/").at(-1)?.replace(/[^a-zA-Z0-9._-]/g, "_") || `asset-${index}`;
@@ -69,9 +74,13 @@ export async function handleCharacterUpload(
         characterJson,
         imagePath,
         protagonistName,
+        thumbnailPath,
       );
       if (bundle.image && imagePath) {
         await setBlob(imagePath, bundle.image);
+      }
+      if (thumbnail && thumbnailPath) {
+        await setBlob(thumbnailPath, thumbnail);
       }
       for (let index = 0; index < bundle.assets.length; index += 1) {
         if (assetPaths[index] === imagePath) continue;
@@ -94,6 +103,7 @@ export async function handleCharacterUpload(
         WorldBookOperations.deleteWorldBook(characterId),
         RegexScriptOperations.deleteRegexScripts(characterId),
         ...(imagePath ? [deleteBlob(imagePath)] : []),
+        ...(thumbnailPath ? [deleteBlob(thumbnailPath)] : []),
         ...[...new Set(assetPaths)].filter((path) => path !== imagePath).map((path) => deleteBlob(path)),
       ]);
       throw error;
@@ -104,6 +114,7 @@ export async function handleCharacterUpload(
       characterId,
       characterData: characterJson,
       imagePath,
+      thumbnailPath,
       hasWorldBook: !!worldBookEntries,
       hasRegexScripts: regexScripts.length > 0,
       embeddedRegexScriptsDisabled: regexScripts.length > 0 && options.trustEmbeddedRegex !== true,

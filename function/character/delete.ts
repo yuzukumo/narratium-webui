@@ -61,6 +61,13 @@ export async function deleteCharacter(character_id: string): Promise<{ success?:
         console.warn("Failed to delete avatar blob:", blobErr);
       }
     }
+    if (character.thumbnailPath) {
+      try {
+        await deleteBlob(character.thumbnailPath);
+      } catch (blobErr) {
+        console.warn("Failed to delete avatar thumbnail blob:", blobErr);
+      }
+    }
     const embeddedAssets = character.data?.data?.extensions?.narratium_charx_assets;
     if (Array.isArray(embeddedAssets)) {
       const prefix = `characters/${character_id}/assets/`;

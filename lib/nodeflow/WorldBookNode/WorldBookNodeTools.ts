@@ -99,7 +99,7 @@ export class WorldBookNodeTools extends NodeTool {
 
       const contextNodeId = nodeId || dialogueTree.current_node_id;
       const nodePath = contextNodeId !== "root"
-        ? await LocalCharacterDialogueOperations.getDialoguePathToNode(characterId, contextNodeId)
+        ? LocalCharacterDialogueOperations.getDialoguePath(dialogueTree, contextNodeId)
         : [];
       
       const messages: DialogueMessage[] = [];

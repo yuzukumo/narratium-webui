@@ -5,8 +5,6 @@
     "close": "Schließen",
     "return": "Zurückkehren",
     "settings": "Einstellungen",
-    "soundOn": "Ton an",
-    "soundOff": "Ton aus",
     "saving": "Sparen..."
   },
   "userMenu": {
@@ -26,9 +24,7 @@
     },
     "general": {
       "language": "Sprache",
-      "sound": "Interface-Sounds",
-      "soundOn": "Ein",
-      "soundOff": "Aus", "avatarUpload": "Avatar hochladen", "avatarUploading": "Wird hochgeladen...", "avatarHint": "PNG, JPEG, WebP oder GIF, maximal 4 MB", "avatarInvalid": "Wähle ein Bild bis 4 MB.", "avatarSaved": "Avatar aktualisiert", "avatarError": "Avatar konnte nicht aktualisiert werden.", "availableBalance": "Verfügbares Kontingent", "refreshBalance": "Kontingent aktualisieren", "name": "Anzeigename", "editName": "Anzeigenamen bearbeiten", "saveName": "Anzeigenamen speichern", "nameSaved": "Anzeigename aktualisiert", "nameError": "Anzeigename konnte nicht aktualisiert werden."
+      "avatarUpload": "Avatar hochladen", "avatarUploading": "Wird hochgeladen...", "avatarHint": "PNG, JPEG, WebP oder GIF, maximal 4 MB", "avatarInvalid": "Wähle ein Bild bis 4 MB.", "avatarSaved": "Avatar aktualisiert", "avatarError": "Avatar konnte nicht aktualisiert werden.", "availableBalance": "Verfügbares Kontingent", "refreshBalance": "Kontingent aktualisieren", "name": "Anzeigename", "editName": "Anzeigenamen bearbeiten", "saveName": "Anzeigenamen speichern", "nameSaved": "Anzeigename aktualisiert", "nameError": "Anzeigename konnte nicht aktualisiert werden."
     },
     "usage": {
       "title": "Nutzungsprotokolle", "description": "Modellanfragen und abgerechnete Nutzung dieses Kontos.",
@@ -40,8 +36,6 @@
   "notifications": {
     "signOutSuccess": "Abgemeldet",
     "signOutError": "Abmelden nicht möglich. Bitte versuchen Sie es erneut.",
-    "soundEnabled": "Toneinstellung gespeichert: ein",
-    "soundDisabled": "Toneinstellung gespeichert: aus",
     "languageSaved": "Spracheinstellung gespeichert",
     "modelSelectedNextRequest": "Modell gewechselt und gilt für die nächste Anfrage",
     "responseLengthSaved": "Einstellung für die Antwortlänge gespeichert"
@@ -566,6 +560,7 @@
     "startConversation": "Beginnen Sie ein Gespräch...",
     "send": "Senden",
     "stopGeneration": "Generierung stoppen",
+    "generationStopped": "Generierung gestoppt.",
     "scrollToBottom": "Zum Ende",
     "contextUsage": "Kontextnutzung",
     "isTyping": "schreibt ...",

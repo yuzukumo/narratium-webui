@@ -3,11 +3,17 @@
 FROM node:24.18.0-alpine AS frontend
 ARG PNPM_VERSION=11.12.0
 WORKDIR /src
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+RUN apk add --no-cache brotli \
+    && corepack enable \
+    && corepack prepare pnpm@${PNPM_VERSION} --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
-RUN NEXT_TELEMETRY_DISABLED=1 pnpm build
+RUN NEXT_TELEMETRY_DISABLED=1 pnpm build \
+    && find out -type f \( -name '*.css' -o -name '*.html' -o -name '*.js' -o -name '*.json' -o -name '*.svg' -o -name '*.txt' -o -name '*.xml' \) -size +1k \
+      -exec gzip -9 -k '{}' \; \
+    && find out -type f \( -name '*.css' -o -name '*.html' -o -name '*.js' -o -name '*.json' -o -name '*.svg' -o -name '*.txt' -o -name '*.xml' \) -size +1k \
+      -exec brotli --quality=11 --keep '{}' \;
 
 FROM golang:1.26.5-alpine AS backend
 ARG GOPROXY="https://proxy.golang.org|direct"

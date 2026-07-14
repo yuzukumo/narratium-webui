@@ -7,7 +7,6 @@
  * - Responsive design with mobile support
  * 
  * Dependencies:
- * - framer-motion: For animations
  * - next/link: For client-side navigation
  * - Custom language support
  */

@@ -5,8 +5,6 @@
     "close": "Cerrar",
     "return": "Devolver",
     "settings": "Ajustes",
-    "soundOn": "Sonido activado",
-    "soundOff": "Quejarse",
     "saving": "Ahorro..."
   },
   "userMenu": {
@@ -26,9 +24,7 @@
     },
     "general": {
       "language": "Idioma",
-      "sound": "Sonidos de interfaz",
-      "soundOn": "Activado",
-      "soundOff": "Desactivado", "avatarUpload": "Subir avatar", "avatarUploading": "Subiendo...", "avatarHint": "PNG, JPEG, WebP o GIF, máximo 4 MB", "avatarInvalid": "Elige una imagen de hasta 4 MB.", "avatarSaved": "Avatar actualizado", "avatarError": "No se pudo actualizar el avatar.", "availableBalance": "Cuota disponible", "refreshBalance": "Actualizar cuota", "name": "Nombre visible", "editName": "Editar nombre visible", "saveName": "Guardar nombre visible", "nameSaved": "Nombre visible actualizado", "nameError": "No se pudo actualizar el nombre visible."
+      "avatarUpload": "Subir avatar", "avatarUploading": "Subiendo...", "avatarHint": "PNG, JPEG, WebP o GIF, máximo 4 MB", "avatarInvalid": "Elige una imagen de hasta 4 MB.", "avatarSaved": "Avatar actualizado", "avatarError": "No se pudo actualizar el avatar.", "availableBalance": "Cuota disponible", "refreshBalance": "Actualizar cuota", "name": "Nombre visible", "editName": "Editar nombre visible", "saveName": "Guardar nombre visible", "nameSaved": "Nombre visible actualizado", "nameError": "No se pudo actualizar el nombre visible."
     },
     "usage": {
       "title": "Registros de uso", "description": "Solicitudes de modelos y uso facturado de esta cuenta.",
@@ -40,8 +36,6 @@
   "notifications": {
     "signOutSuccess": "Cerrado sesión",
     "signOutError": "No se puede cerrar sesión. Por favor inténtalo de nuevo.",
-    "soundEnabled": "Configuración de sonido guardada: activada",
-    "soundDisabled": "Configuración de sonido guardada: desactivada",
     "languageSaved": "Preferencia de idioma guardada",
     "modelSelectedNextRequest": "Modelo cambiado y se aplicará a la próxima solicitud.",
     "responseLengthSaved": "Preferencia de longitud de respuesta guardada"
@@ -566,6 +560,7 @@
     "startConversation": "Iniciar una conversación...",
     "send": "Enviar",
     "stopGeneration": "Detener la generación",
+    "generationStopped": "Generación detenida.",
     "scrollToBottom": "Ir al final",
     "contextUsage": "Uso del contexto",
     "isTyping": "está escribiendo...",

@@ -24,6 +24,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useLanguage } from "@/app/i18n";
 import { defaultProtagonistName } from "@/lib/i18n/languages";
 import { toast } from "react-hot-toast";
@@ -33,20 +34,28 @@ import { ParsedResponse } from "@/lib/models/parsed-response";
 import { v4 as uuidv4 } from "uuid";
 import { initCharacterDialogue } from "@/function/dialogue/init";
 import { getCharacterDialogue } from "@/function/dialogue/info";
+import { MOBILE_VIEWPORT_QUERY, useMediaQuery } from "@/lib/browser/use-media-query";
 import { handleCharacterChatRequest, resumeCharacterChatRun } from "@/function/dialogue/chat";
 import { switchDialogueBranch } from "@/function/dialogue/truncate";
 import CharacterChatPanel from "@/components/CharacterChatPanel";
-import WorldBookEditor from "@/components/WorldBookEditor";
-import RegexScriptEditor from "@/components/RegexScriptEditor";
-import PresetEditor from "@/components/PresetEditor";
 import CharacterChatHeader from "@/components/CharacterChatHeader";
 import { getStoredResponseLength } from "@/utils/api-config";
 import { useModels } from "@/contexts/ModelContext";
 import { APIError, parseAPIError } from "@/utils/api-client";
-import { acknowledgeChatRun, getPendingChatRuns } from "@/utils/chat-runs";
+import { acknowledgeChatRun, cancelChatRun, getPendingChatRuns } from "@/utils/chat-runs";
 import { LLMStreamError } from "@/utils/llm-api";
 import { NARRATIVE_MODE_DIRECTIVES } from "@/lib/prompts/preset-prompts";
 import { LocalCharacterRecordOperations } from "@/lib/data/character-record-operation";
+
+const editorLoading = () => (
+  <div className="flex h-full min-h-0 items-center justify-center" aria-busy="true">
+    <span className="h-6 w-6 animate-spin rounded-full border-2 border-[#665442] border-t-[#e0b766]" />
+  </div>
+);
+
+const WorldBookEditor = dynamic(() => import("@/components/WorldBookEditor"), { loading: editorLoading });
+const RegexScriptEditor = dynamic(() => import("@/components/RegexScriptEditor"), { loading: editorLoading });
+const PresetEditor = dynamic(() => import("@/components/PresetEditor"), { loading: editorLoading });
 
 /**
  * Interface definitions for the component's data structures
@@ -135,11 +144,12 @@ export default function CharacterPage() {
   const [pageError, setPageError] = useState("");
   const [userInput, setUserInput] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useMediaQuery(MOBILE_VIEWPORT_QUERY);
   const [viewportReady, setViewportReady] = useState(false);
   const [suggestedInputs, setSuggestedInputs] = useState<string[]>([]);
   const initializationRef = useRef(false);
   const generationControllerRef = useRef<AbortController | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
   const lastIsMobileRef = useRef<boolean | null>(null);
   const [activeView, setActiveView] = useState<"chat" | "worldbook" | "regex" | "preset">("chat");
   const [activeModes, setActiveModes] = useState<ActiveModes>({
@@ -164,29 +174,12 @@ export default function CharacterPage() {
   };
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (isMobile === null || lastIsMobileRef.current === isMobile) return;
 
-    const syncViewport = () => {
-      const mobile = window.innerWidth < 768;
-      const previousMobile = lastIsMobileRef.current;
-
-      setIsMobile(mobile);
-
-      if (previousMobile === null || previousMobile !== mobile) {
-        setSidebarCollapsed(mobile);
-      }
-
-      lastIsMobileRef.current = mobile;
-    };
-
-    syncViewport();
+    setSidebarCollapsed(isMobile);
+    lastIsMobileRef.current = isMobile;
     setViewportReady(true);
-    window.addEventListener("resize", syncViewport);
-
-    return () => window.removeEventListener("resize", syncViewport);
-  }, []);
+  }, [isMobile]);
 
   useEffect(() => {
     if (characterId) {
@@ -310,15 +303,44 @@ export default function CharacterPage() {
 
     setMessages((prev) => {
       if (replaceMessageId && prev.some((item) => item.id === replaceMessageId)) {
-        return prev.map((item) => (
-          item.id === replaceMessageId
-            ? { ...item, ...errorMessage, nodeId: item.nodeId || item.id }
-            : item
-        ));
+        return prev.map((item) => {
+          if (item.id !== replaceMessageId) return item;
+          const hasPartialResponse = item.role === "assistant" && item.content.trim() !== "";
+          return {
+            ...item,
+            role: hasPartialResponse ? "assistant" : "error",
+            content: hasPartialResponse ? item.content : message,
+            parsedContent: {
+              ...(item.parsedContent || {}),
+              generationStatus: "failed",
+              errorMessage: message,
+            },
+            nodeId: item.nodeId || item.id,
+          };
+        });
       }
 
       return [...prev, errorMessage];
     });
+  };
+
+  const markInlineGenerationStopped = (messageId: string) => {
+    const stoppedMessage = t("characterChat.generationStopped") || "Generation stopped.";
+    setMessages((prev) => prev.map((item) => {
+      if (item.id !== messageId) return item;
+      const hasPartialResponse = item.content.trim() !== "";
+      return {
+        ...item,
+        role: hasPartialResponse ? "assistant" : "error",
+        content: hasPartialResponse ? item.content : stoppedMessage,
+        parsedContent: {
+          ...(item.parsedContent || {}),
+          generationStatus: "canceled",
+          errorMessage: stoppedMessage,
+        },
+        nodeId: item.nodeId || item.id,
+      };
+    }));
   };
 
   const generationErrorMessage = (reason: unknown): string => {
@@ -354,7 +376,7 @@ export default function CharacterPage() {
           id: character.id,
           name: character.data.name,
           personality: character.data.personality,
-          avatar_path: character.imagePath,
+          avatar_path: character.thumbnailPath || character.imagePath,
           protagonistName: character.protagonistName,
         };
         setCharacter(characterInfo);
@@ -429,18 +451,35 @@ export default function CharacterPage() {
     const decoder = new TextDecoder();
     let buffer = "";
     let finalResult: any = null;
-    const updateAssistantMessage = (
-      content: string,
-      parsedContent?: ParsedResponse | null,
-      nextMessageId?: string,
-    ) => {
+    let updateFrame: number | null = null;
+    let pendingUpdate: {
+      content: string;
+      parsedContent?: ParsedResponse | null;
+      nextMessageId?: string;
+    } | null = null;
+    const applyAssistantMessageUpdate = () => {
+      if (updateFrame !== null) {
+        window.cancelAnimationFrame(updateFrame);
+        updateFrame = null;
+      }
+      const update = pendingUpdate;
+      pendingUpdate = null;
+      if (!update) return;
+      const { content, parsedContent, nextMessageId } = update;
+      const resolvedContent = content.trim()
+        ? content
+        : parsedContent?.generationStatus && parsedContent.generationStatus !== "completed"
+          ? parsedContent.errorMessage || content
+          : content;
       setMessages((prev) => prev.map((item) => (
         item.id === assistantMessageId
           ? {
             ...item,
             id: nextMessageId || item.id,
-            role: "assistant",
-            content,
+            role: parsedContent?.generationStatus && parsedContent.generationStatus !== "completed" && !content.trim()
+              ? "error"
+              : "assistant",
+            content: resolvedContent,
             parsedContent: parsedContent ?? item.parsedContent ?? null,
             alternativeIndex: parsedContent?.alternativeIndex ?? item.alternativeIndex,
             alternativeCount: parsedContent?.alternativeCount ?? item.alternativeCount,
@@ -448,6 +487,19 @@ export default function CharacterPage() {
           }
           : item
       )));
+    };
+    const updateAssistantMessage = (
+      content: string,
+      parsedContent?: ParsedResponse | null,
+      nextMessageId?: string,
+      immediate = false,
+    ) => {
+      pendingUpdate = { content, parsedContent, nextMessageId };
+      if (immediate) {
+        applyAssistantMessageUpdate();
+      } else if (updateFrame === null) {
+        updateFrame = window.requestAnimationFrame(applyAssistantMessageUpdate);
+      }
     };
     const handleFrame = async (frame: string) => {
       const data = frame
@@ -473,15 +525,14 @@ export default function CharacterPage() {
         updateAssistantMessage(event.content || "");
       } else if (event.type === "complete") {
         finalResult = event;
-        updateAssistantMessage(event.content || "", event.parsedContent || null, responseNodeId);
+        updateAssistantMessage(event.content || "", event.parsedContent || null, responseNodeId, true);
       } else if (event.type === "stopped") {
         finalResult = event;
-        if (event.content) {
-          updateAssistantMessage(event.content, event.parsedContent || null, responseNodeId);
-        } else {
-          setMessages((prev) => prev.filter((item) => item.id !== assistantMessageId));
-        }
+        updateAssistantMessage(event.content || "", event.parsedContent || null, responseNodeId, true);
       } else if (event.type === "error") {
+        if (event.content !== undefined || event.parsedContent) {
+          updateAssistantMessage(event.content || "", event.parsedContent || null, undefined, true);
+        }
         // Provider failures are acknowledged only after an active tab receives
         // them. Local post-processing failures stay pending for the next tab.
         if (event.run_id && event.acknowledge) {
@@ -495,15 +546,19 @@ export default function CharacterPage() {
       }
     };
 
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      const frames = buffer.split("\n\n");
-      buffer = frames.pop() || "";
-      for (const frame of frames) await handleFrame(frame);
-      if (done) break;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() || "";
+        for (const frame of frames) await handleFrame(frame);
+        if (done) break;
+      }
+      if (buffer.trim()) await handleFrame(buffer);
+    } finally {
+      applyAssistantMessageUpdate();
     }
-    if (buffer.trim()) await handleFrame(buffer);
     if (!finalResult?.success) {
       throw new Error(finalResult?.message || "Failed to get response");
     }
@@ -615,13 +670,12 @@ export default function CharacterPage() {
         parentNodeId,
         signal: requestController.signal,
       });
+      activeRunIdRef.current = response.headers.get("X-Chat-Run-ID");
 
 	  return await consumeChatResponse(response, assistantMessageId, responseNodeId);
     } catch (err) {
       if (requestController?.signal.aborted) {
-        setMessages((prev) => prev.filter((item) => (
-          item.id !== assistantMessageId || item.content.trim() !== ""
-        )));
+        markInlineGenerationStopped(assistantMessageId);
         return true;
       }
       console.error("Error sending message:", err);
@@ -633,6 +687,7 @@ export default function CharacterPage() {
       if (generationControllerRef.current === requestController) {
         generationControllerRef.current = null;
       }
+      activeRunIdRef.current = null;
       setIsSending(false);
     }
   };
@@ -653,8 +708,25 @@ export default function CharacterPage() {
           const pendingUserMessageId = `pending-user:${run.node_id}`;
           const pendingAssistantMessageId = `pending-assistant:${run.id}`;
           setMessages((previous) => {
-            if (previous.some((item) => (item.nodeId || item.id) === responseNodeId)) {
+            const hasAssistantMessage = previous.some((item) => (
+              (item.role === "assistant" || item.role === "error")
+              && (item.nodeId || item.id) === responseNodeId
+            ));
+            if (hasAssistantMessage) {
               return previous;
+            }
+            const userIndex = previous.findIndex((item) => (
+              item.role === "user" && (item.nodeId || item.id) === responseNodeId
+            ));
+            if (userIndex >= 0) {
+              return [
+                ...previous.slice(0, userIndex + 1),
+                createPendingAssistantMessage(pendingAssistantMessageId, {
+                  nodeId: responseNodeId,
+                  parentNodeId: run.parent_node_id,
+                }),
+                ...previous.slice(userIndex + 1),
+              ];
             }
             const parentIndex = run.parent_node_id === "root"
               ? -1
@@ -686,13 +758,17 @@ export default function CharacterPage() {
               characterName: character.name,
               signal: controller.signal,
             });
+            activeRunIdRef.current = response.headers.get("X-Chat-Run-ID") || run.id;
             await consumeChatResponse(response, pendingAssistantMessageId, run.node_id);
           } catch (error) {
-            if (!controller.signal.aborted) {
+            if (controller.signal.aborted) {
+              markInlineGenerationStopped(pendingAssistantMessageId);
+            } else {
               upsertInlineErrorMessage(generationErrorMessage(error), pendingAssistantMessageId);
             }
           } finally {
             if (generationControllerRef.current === controller) generationControllerRef.current = null;
+            activeRunIdRef.current = null;
           }
         }
       } catch (error) {
@@ -806,7 +882,15 @@ export default function CharacterPage() {
   };
 
   const handleStopGeneration = () => {
-    generationControllerRef.current?.abort();
+    const runId = activeRunIdRef.current;
+    if (!runId) {
+      generationControllerRef.current?.abort();
+      return;
+    }
+    void cancelChatRun(runId).catch((error) => {
+      console.error("Failed to stop generation:", error);
+      toast.error(generationErrorMessage(error));
+    });
   };
 
   const handleModelChange = (modelId: string) => {

@@ -5,8 +5,6 @@
     "close": "Fermer",
     "return": "Retour",
     "settings": "Réglages",
-    "soundOn": "Son activé",
-    "soundOff": "Son désactivé",
     "saving": "Économie..."
   },
   "userMenu": {
@@ -26,9 +24,7 @@
     },
     "general": {
       "language": "Langue",
-      "sound": "Sons de l'interface",
-      "soundOn": "Activé",
-      "soundOff": "Désactivé", "avatarUpload": "Importer un avatar", "avatarUploading": "Import...", "avatarHint": "PNG, JPEG, WebP ou GIF, 4 Mo maximum", "avatarInvalid": "Choisissez une image de 4 Mo maximum.", "avatarSaved": "Avatar mis à jour", "avatarError": "Impossible de mettre à jour l'avatar.", "availableBalance": "Quota disponible", "refreshBalance": "Actualiser le quota", "name": "Nom affiché", "editName": "Modifier le nom affiché", "saveName": "Enregistrer le nom affiché", "nameSaved": "Nom affiché mis à jour", "nameError": "Impossible de mettre à jour le nom affiché."
+      "avatarUpload": "Importer un avatar", "avatarUploading": "Import...", "avatarHint": "PNG, JPEG, WebP ou GIF, 4 Mo maximum", "avatarInvalid": "Choisissez une image de 4 Mo maximum.", "avatarSaved": "Avatar mis à jour", "avatarError": "Impossible de mettre à jour l'avatar.", "availableBalance": "Quota disponible", "refreshBalance": "Actualiser le quota", "name": "Nom affiché", "editName": "Modifier le nom affiché", "saveName": "Enregistrer le nom affiché", "nameSaved": "Nom affiché mis à jour", "nameError": "Impossible de mettre à jour le nom affiché."
     },
     "usage": {
       "title": "Journaux d'utilisation", "description": "Requêtes de modèle et utilisation facturée pour ce compte.",
@@ -40,8 +36,6 @@
   "notifications": {
     "signOutSuccess": "Déconnecté",
     "signOutError": "Impossible de se déconnecter. Veuillez réessayer.",
-    "soundEnabled": "Paramètre sonore enregistré : activé",
-    "soundDisabled": "Paramètre sonore enregistré : désactivé",
     "languageSaved": "Préférence de langue enregistrée",
     "modelSelectedNextRequest": "Modèle changé et s'appliquera à la prochaine demande",
     "responseLengthSaved": "Préférence de longueur de réponse enregistrée"
@@ -566,6 +560,7 @@
     "startConversation": "Démarrer une conversation...",
     "send": "Envoyer",
     "stopGeneration": "Arrêter la génération",
+    "generationStopped": "Génération arrêtée.",
     "scrollToBottom": "Aller en bas",
     "contextUsage": "Utilisation du contexte",
     "isTyping": "est en train d'écrire...",

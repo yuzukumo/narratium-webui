@@ -20,6 +20,7 @@ import {
   suspendAPIUserBinding,
 } from "@/utils/api-client";
 import { clearDataRevisionCache } from "@/lib/data/local-storage";
+import { clearBlobUrlCache } from "@/lib/data/blob-url-cache";
 import { PREFERENCES_CHANGED_EVENT } from "@/app/i18n";
 import {
   clearLocalPreferenceCache,
@@ -74,6 +75,9 @@ function clearAccountClientCaches(clearPreferences: boolean): void {
   clearDataRevisionCache();
   if (typeof window === "undefined") {
     return;
+  }
+  if (clearPreferences) {
+    clearBlobUrlCache();
   }
   if (clearPreferences) {
     clearLocalPreferenceCache(window.localStorage);

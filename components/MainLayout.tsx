@@ -4,40 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import UserMenu from "@/components/UserMenu";
+import { MOBILE_VIEWPORT_QUERY, useMediaQuery } from "@/lib/browser/use-media-query";
 import "@/app/styles/fantasy-ui.css";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useMediaQuery(MOBILE_VIEWPORT_QUERY);
   const lastIsMobileRef = useRef<boolean | null>(null);
 
   useEffect(() => {
-    const checkIfMobile = () => {
-      const mobile = window.innerWidth < 768;
-      const previousMobile = lastIsMobileRef.current;
+    if (isMobile === null || lastIsMobileRef.current === isMobile) return;
 
-      setIsMobile(mobile);
-
-      if (previousMobile === null) {
-        const storedSidebarState = window.localStorage.getItem("sidebarState");
-        setSidebarOpen(mobile ? false : storedSidebarState !== "closed");
-      } else if (previousMobile !== mobile) {
-        const storedSidebarState = window.localStorage.getItem("sidebarState");
-        setSidebarOpen(mobile ? false : storedSidebarState !== "closed");
-      }
-
-      lastIsMobileRef.current = mobile;
-    };
-
-    checkIfMobile();
-    setMounted(true);
-    
-    window.addEventListener("resize", checkIfMobile);
-    
-    return () => window.removeEventListener("resize", checkIfMobile);
-  }, []);
+    const storedSidebarState = window.localStorage.getItem("sidebarState");
+    setSidebarOpen(isMobile ? false : storedSidebarState !== "closed");
+    lastIsMobileRef.current = isMobile;
+  }, [isMobile]);
 
   const toggleSidebar = () => {
     setSidebarOpen((current) => {
@@ -49,7 +31,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     });
   };
 
-  if (!mounted) {
+  if (isMobile === null) {
     return null;
   }
 

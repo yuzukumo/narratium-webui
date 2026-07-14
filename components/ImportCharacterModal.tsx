@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/app/i18n";
 import { trackButtonClick } from "@/utils/google-analytics";
 import { handleCharacterUpload } from "@/function/character/import";
@@ -139,131 +138,120 @@ export default function ImportCharacterModal({ isOpen, onClose, onImport }: Impo
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 backdrop-blur-sm bg-opacity-50"
-            onClick={handleClose}
-          />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="ui-fade-in absolute inset-0 backdrop-blur-sm bg-opacity-50"
+        onClick={handleClose}
+      />
           
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fantasy-bg fantasy-scrollbar relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-[#534741] bg-[#1e1c1b] bg-opacity-75 shadow-xl backdrop-filter backdrop-blur-sm"
+      <div
+        className="ui-dialog-enter fantasy-bg fantasy-scrollbar relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-[#534741] bg-[#1e1c1b] bg-opacity-75 shadow-xl backdrop-filter backdrop-blur-sm"
+      >
+        <div className="p-6">
+          <h2 className={`text-xl text-[#eae6db] mb-4 ${serifFontClass}`}>{t("importCharacterModal.title")}</h2>
+
+          <p className={`text-[#c0a480] mb-6 text-sm ${fontClass}`}>
+            {t("importCharacterModal.description")}
+          </p>
+              
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 mb-4 text-center transition-colors duration-300 ${isDragging ? "border-[#f9c86d] bg-[#252220]" : "border-[#534741] hover:border-[#a18d6f]"}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
           >
-            <div className="p-6">
-              <h2 className={`text-xl text-[#eae6db] mb-4 ${serifFontClass}`}>{t("importCharacterModal.title")}</h2>
-              
-              <p className={`text-[#c0a480] mb-6 text-sm ${fontClass}`}>
-                {t("importCharacterModal.description")}
-              </p>
-              
-              <div
-                className={`border-2 border-dashed rounded-lg p-8 mb-4 text-center transition-colors duration-300 ${isDragging ? "border-[#f9c86d] bg-[#252220]" : "border-[#534741] hover:border-[#a18d6f]"}`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept="image/png,.json,.charx,application/json,application/zip"
-                  onChange={handleFileSelect}
-                />
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/png,.json,.charx,application/json,application/zip"
+              onChange={handleFileSelect}
+            />
                 
-                <div className="flex flex-col items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className={`w-12 h-12 mb-3 ${selectedFile ? "text-[#f9c86d]" : "text-[#a18d6f]"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
+            <div className="flex flex-col items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className={`w-12 h-12 mb-3 ${selectedFile ? "text-[#f9c86d]" : "text-[#a18d6f]"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
                   
-                  {selectedFile ? (
-                    <div className={`text-[#eae6db] ${fontClass}`}>
-                      <p className="font-medium">{selectedFile.name}</p>
-                      <p className="text-xs text-[#a18d6f] mt-1">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                  ) : (
-                    <div className={`text-[#a18d6f] ${fontClass}`}>
-                      <p>{t("importCharacterModal.dragOrClick")}</p>
-                      <p className="text-xs mt-1">{t("importCharacterModal.pngFormat")}</p>
-                    </div>
-                  )}
+              {selectedFile ? (
+                <div className={`text-[#eae6db] ${fontClass}`}>
+                  <p className="font-medium">{selectedFile.name}</p>
+                  <p className="text-xs text-[#a18d6f] mt-1">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                 </div>
-              </div>
-
-              {selectedFile && (
-                <label className={`mb-4 block text-sm text-[#c0a480] ${fontClass}`}>
-                  <span className="block text-xs font-medium text-[#d8c9b3]">
-                    {t("importCharacterModal.protagonistName")}
-                  </span>
-                  <input
-                    autoComplete="off"
-                    autoFocus
-                    maxLength={MAX_PROTAGONIST_NAME_LENGTH}
-                    value={protagonistName}
-                    onChange={(event) => {
-                      setProtagonistName(event.target.value);
-                      setError("");
-                    }}
-                    className="mt-1.5 h-10 w-full rounded-md border border-[#534741] bg-[#171513] px-3 text-sm text-[#eae6db] outline-none transition-colors placeholder:text-[#706455] focus:border-amber-500/60 focus:ring-2 focus:ring-amber-500/10"
-                    placeholder={t("importCharacterModal.protagonistNamePlaceholder")}
-                  />
-                  <span className="mt-1.5 block text-[11px] text-[#817361]">
-                    {t("importCharacterModal.protagonistNameImmutable")}
-                  </span>
-                </label>
-              )}
-              
-              {error && (
-                <div className="text-[#e57373] text-sm mb-4 text-center">
-                  {error}
+              ) : (
+                <div className={`text-[#a18d6f] ${fontClass}`}>
+                  <p>{t("importCharacterModal.dragOrClick")}</p>
+                  <p className="text-xs mt-1">{t("importCharacterModal.pngFormat")}</p>
                 </div>
               )}
-
-              {embeddedScriptCount > 0 && (
-                <label className={`mb-4 flex cursor-pointer items-center gap-3 rounded-md border border-[#534741] bg-[#252220]/70 px-3 py-2.5 text-sm text-[#c0a480] ${fontClass}`}>
-                  <input
-                    type="checkbox"
-                    checked={trustEmbeddedRegex}
-                    onChange={(event) => setTrustEmbeddedRegex(event.target.checked)}
-                    className="h-4 w-4 rounded border-[#534741] bg-[#1a1816] text-amber-500 focus:ring-amber-500/40"
-                  />
-                  <span>{t("importCharacterModal.enableEmbeddedRegex")}</span>
-                </label>
-              )}
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={handleClose}
-                  className={`px-4 py-2 text-[#c0a480] hover:text-[#ffd475] transition-colors ${fontClass}`}
-                >
-                  {t("common.cancel")}  
-                </button>
-                
-                <button
-                  onClick={(e) => {trackButtonClick("ImportCharacterModal", "导入角色");handleUpload();}}
-                  disabled={!selectedFile || !protagonistName.trim() || isUploading}
-                  className={`px-4 py-2 bg-[#252220] hover:bg-[#3a2a2a] border border-[#534741] rounded-md text-[#f9c86d] transition-colors ${fontClass} ${(!selectedFile || !protagonistName.trim() || isUploading) ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  {isUploading ? (
-                    <div className="flex items-center">
-                      <div className="w-4 h-4 mr-2 rounded-full border-2 border-t-[#f9c86d] border-r-[#c0a480] border-b-[#a18d6f] border-l-transparent animate-spin"></div>
-                      {t("importCharacterModal.uploading")}
-                    </div>
-                  ) : t("importCharacterModal.import")}
-                </button>
-              </div>
             </div>
-          </motion.div>
+          </div>
+
+          {selectedFile && (
+            <label className={`mb-4 block text-sm text-[#c0a480] ${fontClass}`}>
+              <span className="block text-xs font-medium text-[#d8c9b3]">
+                {t("importCharacterModal.protagonistName")}
+              </span>
+              <input
+                autoComplete="off"
+                autoFocus
+                maxLength={MAX_PROTAGONIST_NAME_LENGTH}
+                value={protagonistName}
+                onChange={(event) => {
+                  setProtagonistName(event.target.value);
+                  setError("");
+                }}
+                className="mt-1.5 h-10 w-full rounded-md border border-[#534741] bg-[#171513] px-3 text-sm text-[#eae6db] outline-none transition-colors placeholder:text-[#706455] focus:border-amber-500/60 focus:ring-2 focus:ring-amber-500/10"
+                placeholder={t("importCharacterModal.protagonistNamePlaceholder")}
+              />
+              <span className="mt-1.5 block text-[11px] text-[#817361]">
+                {t("importCharacterModal.protagonistNameImmutable")}
+              </span>
+            </label>
+          )}
+
+          {error && (
+            <div className="text-[#e57373] text-sm mb-4 text-center">
+              {error}
+            </div>
+          )}
+
+          {embeddedScriptCount > 0 && (
+            <label className={`mb-4 flex cursor-pointer items-center gap-3 rounded-md border border-[#534741] bg-[#252220]/70 px-3 py-2.5 text-sm text-[#c0a480] ${fontClass}`}>
+              <input
+                type="checkbox"
+                checked={trustEmbeddedRegex}
+                onChange={(event) => setTrustEmbeddedRegex(event.target.checked)}
+                className="h-4 w-4 rounded border-[#534741] bg-[#1a1816] text-amber-500 focus:ring-amber-500/40"
+              />
+              <span>{t("importCharacterModal.enableEmbeddedRegex")}</span>
+            </label>
+          )}
+
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={handleClose}
+              className={`px-4 py-2 text-[#c0a480] hover:text-[#ffd475] transition-colors ${fontClass}`}
+            >
+              {t("common.cancel")}
+            </button>
+
+            <button
+              onClick={(e) => {trackButtonClick("ImportCharacterModal", "导入角色");handleUpload();}}
+              disabled={!selectedFile || !protagonistName.trim() || isUploading}
+              className={`px-4 py-2 bg-[#252220] hover:bg-[#3a2a2a] border border-[#534741] rounded-md text-[#f9c86d] transition-colors ${fontClass} ${(!selectedFile || !protagonistName.trim() || isUploading) ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {isUploading ? (
+                <div className="flex items-center">
+                  <div className="w-4 h-4 mr-2 rounded-full border-2 border-t-[#f9c86d] border-r-[#c0a480] border-b-[#a18d6f] border-l-transparent animate-spin"></div>
+                  {t("importCharacterModal.uploading")}
+                </div>
+              ) : t("importCharacterModal.import")}
+            </button>
+          </div>
         </div>
-      )}
-    </AnimatePresence>
+      </div>
+    </div>
   );
 }

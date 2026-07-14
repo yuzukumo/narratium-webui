@@ -78,7 +78,7 @@ export default function LoginModal() {
   return (
     <main className="relative h-full min-h-0 overflow-x-hidden overflow-y-auto bg-[#1a1816] font-sans text-[#eae6db]">
       <Image
-        src="/background_yellow.png"
+        src="/background_yellow.webp"
         alt=""
         fill
         priority
@@ -99,7 +99,7 @@ export default function LoginModal() {
 
           <div className="border-b border-[#534741]/80 bg-gradient-to-r from-amber-500/5 via-orange-400/5 to-transparent px-5 pb-5 pt-6 text-center sm:px-7">
             <Image
-              src="/logo_circle.png"
+              src="/logo_circle.webp"
               alt="Narratium"
               width={58}
               height={58}

@@ -1,7 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import Link from "next/link";
 import { useLanguage } from "../app/i18n";
 
@@ -13,35 +11,13 @@ import { useLanguage } from "../app/i18n";
  */
 export default function HomeContent() {
   const { t, fontClass, serifFontClass } = useLanguage();
-  const [mounted, setMounted] = useState(false);
-  const [imagesLoaded, setImagesLoaded] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const yellowImg = new Image();
-    const redImg = new Image();
-    
-    yellowImg.src = "/background_yellow.png";
-    redImg.src = "/background_red.png";
-    
-    Promise.all([
-      new Promise(resolve => yellowImg.onload = resolve),
-      new Promise(resolve => redImg.onload = resolve),
-    ]).then(() => {
-      setImagesLoaded(true);
-    });
-  }, []);
-
-  if (!mounted) return null;
 
   return (
     <div className="flex flex-col items-center justify-center h-full login-fantasy-bg relative">
       <div
-        className={`absolute inset-0 z-0 opacity-35 transition-opacity duration-500 ${
-          imagesLoaded ? "opacity-35" : "opacity-0"
-        }`}
+        className="absolute inset-0 z-0 opacity-35"
         style={{
-          backgroundImage: "url('/background_yellow.png')",
+          backgroundImage: "url('/background_yellow.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -49,11 +25,9 @@ export default function HomeContent() {
       />
 
       <div
-        className={`absolute inset-0 z-1 opacity-45 transition-opacity duration-500 ${
-          imagesLoaded ? "opacity-45" : "opacity-0"
-        }`}
+        className="absolute inset-0 z-1 opacity-45"
         style={{
-          backgroundImage: "url('/background_red.png')",
+          backgroundImage: "url('/background_red.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -83,11 +57,8 @@ export default function HomeContent() {
         </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        className="text-center max-w-2xl px-4 relative z-20"
+      <div
+        className="ui-enter-up text-center max-w-2xl px-4 relative z-20"
       >
         <h1 className="text-5xl font-cinzel mb-6 bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300 drop-shadow-[0_0_10px_rgba(251,146,60,0.5)]">
         Narratium
@@ -108,16 +79,14 @@ export default function HomeContent() {
 
         <div className="flex flex-col md:flex-row gap-4 justify-center mt-6">
           <Link href="/character-cards">
-            <motion.div
-              className={`portal-button text-[#c0a480] hover:text-[#ffd475] text-sm px-6 py-2 border border-[#534741] rounded-md cursor-pointer ${fontClass} tracking-wide shadow-inner`}
-              whileHover={{ scale: 1.03, backgroundColor: "rgba(40, 35, 30, 0.6)" }}
-              transition={{ type: "spring", stiffness: 400, damping: 15 }}
+            <div
+              className={`portal-button text-[#c0a480] hover:text-[#ffd475] hover:scale-[1.03] hover:bg-[rgba(40,35,30,0.6)] transition-[transform,background-color,color] text-sm px-6 py-2 border border-[#534741] rounded-md cursor-pointer ${fontClass} tracking-wide shadow-inner`}
             >
               {t("homePage.immediatelyStart")}
-            </motion.div>
+            </div>
           </Link>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 } 

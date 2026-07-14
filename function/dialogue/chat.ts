@@ -314,6 +314,101 @@ function extractVisibleStreamContent(rawResponse: string): string {
     .trim();
 }
 
+type GenerationStatus = "pending" | "completed" | "failed" | "canceled";
+
+function generationMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function runParsedContent(input: {
+  screenContent: string;
+  status: GenerationStatus;
+  modelId: string;
+  modelName: string;
+  promptDirectives?: string[];
+  usage?: ResponseUsageMetrics;
+  errorCode?: string;
+  errorMessage?: string;
+  nextPrompts?: string[];
+  event?: string;
+}): ParsedResponse {
+  return {
+    regexResult: input.screenContent,
+    nextPrompts: input.nextPrompts,
+    promptDirectives: input.promptDirectives?.length ? input.promptDirectives : undefined,
+    compressedContent: input.event,
+    usage: input.usage,
+    modelId: input.modelId,
+    modelName: input.modelName,
+    generationStatus: input.status,
+    errorCode: input.errorCode,
+    errorMessage: input.errorMessage,
+  };
+}
+
+async function persistDialogueGenerationState(input: {
+  characterId: string;
+  nodeId: string;
+  parentNodeId: string;
+  userMessage: string;
+  fullResponse: string;
+  screenContent: string;
+  status: GenerationStatus;
+  modelId: string;
+  modelName: string;
+  promptDirectives?: string[];
+  usage?: ResponseUsageMetrics;
+  errorCode?: string;
+  errorMessage?: string;
+  nextPrompts?: string[];
+  event?: string;
+}): Promise<void> {
+  await LocalCharacterDialogueOperations.upsertNodeToDialogueTree(
+    input.characterId,
+    input.parentNodeId,
+    input.userMessage,
+    input.screenContent,
+    input.fullResponse,
+    runParsedContent(input),
+    input.nodeId,
+  );
+}
+
+async function persistRunFailure(input: {
+  run: ChatRun;
+  characterId: string;
+  parentNodeId: string;
+  promptDirectives?: string[];
+  modelId: string;
+  modelName: string;
+  status: "failed" | "canceled";
+  fallbackMessage: string;
+}): Promise<ParsedResponse> {
+  const rawResponse = input.run.response_text || "";
+  const screenContent = extractVisibleStreamContent(rawResponse);
+  const errorMessage = input.run.error_message || input.fallbackMessage;
+  const parsedContent = runParsedContent({
+    screenContent,
+    status: input.status,
+    modelId: input.modelId,
+    modelName: input.modelName,
+    promptDirectives: input.promptDirectives,
+    usage: runUsageToMetrics(input.run.usage),
+    errorCode: input.run.error_code,
+    errorMessage,
+  });
+  await LocalCharacterDialogueOperations.upsertNodeToDialogueTree(
+    input.characterId,
+    input.parentNodeId,
+    input.run.user_message,
+    screenContent,
+    rawResponse,
+    parsedContent,
+    input.run.node_id,
+  );
+  return parsedContent;
+}
+
 async function processDialogueResponse(
   llmResponse: string,
   characterId: string,
@@ -395,40 +490,25 @@ async function handleCharacterChatStreamingRequest(payload: {
   ) {
     throw new Error("The selected dialogue branch no longer exists. Reload the conversation and try again.");
   }
-  let promptFramework = await buildDialoguePromptFramework({
+
+  // Commit the user turn before any prompt assembly or provider request. The
+  // node is updated in place as the run moves through its lifecycle, so an
+  // error, stop, or browser disconnect cannot erase the submitted message.
+  await persistDialogueGenerationState({
     characterId: payload.characterId,
-    message: payload.message,
-    language: payload.language,
-    protagonistName: payload.protagonistName,
-    characterName: payload.characterName,
-    number: payload.number,
-    modelId: payload.modelId,
-    nodeId: parentNodeId,
-    contextWindow: payload.contextWindow,
-    compactionThreshold: payload.compactionThreshold,
-    modelMaxOutputTokens: payload.modelMaxOutputTokens,
-    signal: payload.signal,
-  });
-  const startRun = () => createChatRun({
-    characterId: payload.characterId,
-    characterName: payload.characterName,
     nodeId: payload.nodeId,
     parentNodeId,
     userMessage: payload.storedUserMessage,
-    modelName: payload.modelName,
+    fullResponse: "",
+    screenContent: "",
+    status: "pending",
     modelId: payload.modelId,
-    systemMessage: promptFramework.systemMessage,
-    userPrompt: promptFramework.userMessage,
-    stableSystemPrefix: promptFramework.stableSystemPrefix,
-    maxTokens: promptFramework.requestMaxOutputTokens,
-    temperature: 0.7,
+    modelName: payload.modelName,
+    promptDirectives: payload.promptDirectives,
   });
-  let run: ChatRun;
+
   try {
-    run = await startRun();
-  } catch (error) {
-    if (!isContextOverflowError(error)) throw error;
-    promptFramework = await buildDialoguePromptFramework({
+    let promptFramework = await buildDialoguePromptFramework({
       characterId: payload.characterId,
       message: payload.message,
       language: payload.language,
@@ -440,25 +520,79 @@ async function handleCharacterChatStreamingRequest(payload: {
       contextWindow: payload.contextWindow,
       compactionThreshold: payload.compactionThreshold,
       modelMaxOutputTokens: payload.modelMaxOutputTokens,
-      forceCompaction: true,
       signal: payload.signal,
     });
-    run = await startRun();
+    const startRun = () => createChatRun({
+      characterId: payload.characterId,
+      characterName: payload.characterName,
+      nodeId: payload.nodeId,
+      parentNodeId,
+      userMessage: payload.storedUserMessage,
+      modelName: payload.modelName,
+      modelId: payload.modelId,
+      systemMessage: promptFramework.systemMessage,
+      userPrompt: promptFramework.userMessage,
+      stableSystemPrefix: promptFramework.stableSystemPrefix,
+      maxTokens: promptFramework.requestMaxOutputTokens,
+      temperature: 0.7,
+    });
+    let run: ChatRun;
+    try {
+      run = await startRun();
+    } catch (error) {
+      if (!isContextOverflowError(error)) throw error;
+      promptFramework = await buildDialoguePromptFramework({
+        characterId: payload.characterId,
+        message: payload.message,
+        language: payload.language,
+        protagonistName: payload.protagonistName,
+        characterName: payload.characterName,
+        number: payload.number,
+        modelId: payload.modelId,
+        nodeId: parentNodeId,
+        contextWindow: payload.contextWindow,
+        compactionThreshold: payload.compactionThreshold,
+        modelMaxOutputTokens: payload.modelMaxOutputTokens,
+        forceCompaction: true,
+        signal: payload.signal,
+      });
+      run = await startRun();
+    }
+    return streamExistingCharacterChatRun({
+      run,
+      characterId: payload.characterId,
+      protagonistName: payload.protagonistName,
+      characterName: payload.characterName,
+      modelId: payload.modelId,
+      modelName: payload.modelName,
+      message: payload.storedUserMessage,
+      storedUserMessage: payload.storedUserMessage,
+      promptDirectives: payload.promptDirectives,
+      nodeId: payload.nodeId,
+      parentNodeId,
+      signal: payload.signal,
+    });
+  } catch (error) {
+    const canceled = payload.signal?.aborted === true;
+    const message = canceled
+      ? "Generation stopped."
+      : generationMessage(error, "The generation could not be started.");
+    await persistDialogueGenerationState({
+      characterId: payload.characterId,
+      nodeId: payload.nodeId,
+      parentNodeId,
+      userMessage: payload.storedUserMessage,
+      fullResponse: "",
+      screenContent: "",
+      status: canceled ? "canceled" : "failed",
+      modelId: payload.modelId,
+      modelName: payload.modelName,
+      promptDirectives: payload.promptDirectives,
+      errorMessage: message,
+      errorCode: canceled ? "canceled" : error instanceof APIError ? error.code : "chat_request_failed",
+    });
+    throw error;
   }
-  return streamExistingCharacterChatRun({
-    run,
-    characterId: payload.characterId,
-    protagonistName: payload.protagonistName,
-    characterName: payload.characterName,
-    modelId: payload.modelId,
-    modelName: payload.modelName,
-    message: payload.storedUserMessage,
-    storedUserMessage: payload.storedUserMessage,
-    promptDirectives: payload.promptDirectives,
-    nodeId: payload.nodeId,
-    parentNodeId,
-    signal: payload.signal,
-  });
 }
 
 export async function resumeCharacterChatRun(payload: {
@@ -507,6 +641,7 @@ async function streamExistingCharacterChatRun(payload: {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
       };
       let latestVisibleContent = "";
+      let latestRun = payload.run;
       let cancellationStarted = false;
       const cancelIfRequested = () => {
         if (cancellationStarted) return;
@@ -528,12 +663,25 @@ async function streamExistingCharacterChatRun(payload: {
             }
           },
         })) {
+          latestRun = run;
           if (run.status === "running" || run.status === "queued") continue;
           if (run.status === "failed") {
+            const parsedContent = await persistRunFailure({
+              run,
+              characterId: payload.characterId,
+              parentNodeId: payload.parentNodeId,
+              promptDirectives: payload.promptDirectives,
+              modelId: payload.modelId,
+              modelName: payload.modelName,
+              status: "failed",
+              fallbackMessage: "The model provider request failed.",
+            });
             send({
               type: "error", success: false,
               code: run.error_code || "chat_run_failed",
               message: run.error_message || "The model provider request failed.",
+              content: parsedContent.regexResult || "",
+              parsedContent,
               run_id: run.id,
               acknowledge: true,
             });
@@ -543,8 +691,27 @@ async function streamExistingCharacterChatRun(payload: {
           const rawResponse = run.response_text || "";
           const usage = runUsageToMetrics(run.usage);
           if (!rawResponse.trim()) {
+            const isCanceled = run.status === "canceled";
+            const parsedContent = await persistRunFailure({
+              run,
+              characterId: payload.characterId,
+              parentNodeId: payload.parentNodeId,
+              promptDirectives: payload.promptDirectives,
+              modelId: payload.modelId,
+              modelName: payload.modelName,
+              status: isCanceled ? "canceled" : "failed",
+              fallbackMessage: isCanceled ? "Generation stopped." : "The generation returned no content.",
+            });
             await acknowledgeChatRun(run.id);
-            send({ type: run.status === "canceled" ? "stopped" : "error", success: run.status === "canceled", content: "", run_id: run.id });
+            send({
+              type: isCanceled ? "stopped" : "error",
+              success: isCanceled,
+              content: "",
+              parsedContent,
+              message: parsedContent.errorMessage,
+              code: parsedContent.errorCode,
+              run_id: run.id,
+            });
             continue;
           }
           const processed = await processDialogueResponse(
@@ -566,16 +733,22 @@ async function streamExistingCharacterChatRun(payload: {
             modelName: payload.modelName,
             responseUsage: usage,
             promptDirectives: payload.promptDirectives,
+            generationStatus: run.status === "canceled" ? "canceled" : "completed",
+            generationError: run.status === "canceled" ? "Generation stopped." : undefined,
           });
           await acknowledgeChatRun(run.id);
           const parsedContent = {
-            nextPrompts: processed.nextPrompts,
-            promptDirectives: payload.promptDirectives.length > 0
-              ? payload.promptDirectives
-              : undefined,
-            usage,
-            modelId: payload.modelId,
-            modelName: payload.modelName,
+            ...runParsedContent({
+              screenContent: processed.screenContent,
+              status: run.status === "canceled" ? "canceled" : "completed",
+              modelId: payload.modelId,
+              modelName: payload.modelName,
+              promptDirectives: payload.promptDirectives,
+              usage,
+              nextPrompts: processed.nextPrompts,
+              event: processed.event,
+              errorMessage: run.status === "canceled" ? "Generation stopped." : undefined,
+            }),
             ...branchMeta,
           };
           if (run.status === "canceled") {
@@ -585,10 +758,59 @@ async function streamExistingCharacterChatRun(payload: {
           }
         }
       } catch (error: any) {
+        if (payload.signal?.aborted) return;
+        const errorMessage = error?.message || "The generation could not be completed.";
+        if (latestRun.status === "canceled") {
+          const parsedContent = await persistRunFailure({
+            run: latestRun,
+            characterId: payload.characterId,
+            parentNodeId: payload.parentNodeId,
+            promptDirectives: payload.promptDirectives,
+            modelId: payload.modelId,
+            modelName: payload.modelName,
+            status: "canceled",
+            fallbackMessage: "Generation stopped.",
+          });
+          await acknowledgeChatRun(latestRun.id).catch(() => undefined);
+          send({
+            type: "stopped",
+            success: true,
+            content: parsedContent.regexResult || "",
+            parsedContent,
+            run_id: latestRun.id,
+          });
+          return;
+        }
+        await persistDialogueGenerationState({
+          characterId: payload.characterId,
+          nodeId: payload.nodeId,
+          parentNodeId: payload.parentNodeId,
+          userMessage: payload.storedUserMessage,
+          fullResponse: latestRun.response_text || "",
+          screenContent: extractVisibleStreamContent(latestRun.response_text || ""),
+          status: "failed",
+          modelId: payload.modelId,
+          modelName: payload.modelName,
+          promptDirectives: payload.promptDirectives,
+          usage: runUsageToMetrics(latestRun.usage),
+          errorCode: error instanceof APIError ? error.code : "chat_run_failed",
+          errorMessage,
+        });
         send({
           type: "error", success: false,
           code: error instanceof APIError ? error.code : "chat_run_failed",
-          message: error?.message || "The generation could not be completed.",
+          message: errorMessage,
+          content: extractVisibleStreamContent(latestRun.response_text || ""),
+          parsedContent: runParsedContent({
+            screenContent: extractVisibleStreamContent(latestRun.response_text || ""),
+            status: "failed",
+            modelId: payload.modelId,
+            modelName: payload.modelName,
+            promptDirectives: payload.promptDirectives,
+            usage: runUsageToMetrics(latestRun.usage),
+            errorCode: error instanceof APIError ? error.code : "chat_run_failed",
+            errorMessage,
+          }),
           run_id: payload.run.id,
           acknowledge: false,
         });
@@ -603,6 +825,7 @@ async function streamExistingCharacterChatRun(payload: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Chat-Run-ID": payload.run.id,
     },
   });
 }
@@ -643,6 +866,8 @@ async function processPostResponseAsync({
   modelName,
   responseUsage,
   promptDirectives,
+  generationStatus = "completed",
+  generationError,
 }: {
   characterId: string;
   message: string;
@@ -656,18 +881,22 @@ async function processPostResponseAsync({
   modelName: string;
   responseUsage?: ResponseUsageMetrics;
   promptDirectives?: string[];
+  generationStatus?: "completed" | "canceled";
+  generationError?: string;
 }) {
   try {
-    const parsed: ParsedResponse = {
-      regexResult: screenContent,
+    const parsed = runParsedContent({
+      screenContent,
       nextPrompts,
-      promptDirectives: promptDirectives?.length ? promptDirectives : undefined,
-      compressedContent: event,
+      promptDirectives,
+      event,
       usage: responseUsage,
       modelId,
       modelName,
-    };
-    await LocalCharacterDialogueOperations.addNodeToDialogueTree(
+      status: generationStatus,
+      errorMessage: generationError,
+    });
+    await LocalCharacterDialogueOperations.upsertNodeToDialogueTree(
       characterId,
       parentNodeId,
       message,

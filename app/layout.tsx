@@ -4,7 +4,6 @@ import "./styles/local-fonts.css";
 import "./styles/fonts.css";
 import MainLayout from "@/components/MainLayout";
 import { LanguageProvider } from "@/app/i18n/LanguageProvider";
-import { SoundProvider } from "@/contexts/SoundContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import AuthGate from "@/components/AuthGate";
 import { ModelProvider } from "@/contexts/ModelContext";
@@ -78,12 +77,10 @@ export default function RootLayout({
         <LanguageProvider>
           <AuthProvider>
             <AuthGate>
-              <SoundProvider>
-                <ModelProvider>
-                  <AppToaster />
-                  <MainLayout>{children}</MainLayout>
-                </ModelProvider>
-              </SoundProvider>
+              <ModelProvider>
+                <AppToaster />
+                <MainLayout>{children}</MainLayout>
+              </ModelProvider>
             </AuthGate>
           </AuthProvider>
         </LanguageProvider>

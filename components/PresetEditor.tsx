@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "react-hot-toast";
 import { getAllPresets, getPreset, deletePreset, togglePresetEnabled, getPromptsForDisplay } from "@/function/preset/global";
 import { deletePromptFromPreset, togglePromptEnabled } from "@/function/preset/edit";
 import { useLanguage } from "@/app/i18n";
-import ImportPresetModal from "@/components/ImportPresetModal";
-import CreatePresetModal from "@/components/CreatePresetModal";
 import "@/app/styles/fantasy-ui.css";
 import React from "react";
-import EditPromptModal from "@/components/EditPromptModal";
+
+const ImportPresetModal = dynamic(() => import("@/components/ImportPresetModal"));
+const CreatePresetModal = dynamic(() => import("@/components/CreatePresetModal"));
+const EditPromptModal = dynamic(() => import("@/components/EditPromptModal"));
 
 interface PresetEditorProps {
   onClose: () => void;
@@ -262,8 +264,14 @@ export default function PresetEditor({
     return sorted;
   };
 
-  const filteredPresets = filterPresets(presets, filterBy);
-  const sortedPresets = sortPresets(filteredPresets, sortBy, sortOrder);
+  const filteredPresets = useMemo(
+    () => filterPresets(presets, filterBy),
+    [presets, filterBy],
+  );
+  const sortedPresets = useMemo(
+    () => sortPresets(filteredPresets, sortBy, sortOrder),
+    [filteredPresets, sortBy, sortOrder],
+  );
 
   const handleCreatePreset = async () => {
     setIsCreateModalOpen(true);
@@ -792,11 +800,11 @@ export default function PresetEditor({
               {sortedPresets.map((preset, index) => (
                 <React.Fragment key={preset.id}>
                   <tr 
-                    className="border-b border-[#534741] hover:bg-[#252220] transition-all duration-300 group"
+                    className="large-list-row border-b border-[#534741] hover:bg-[#252220] transition-all duration-300 group"
                     style={{
                       opacity: animationComplete ? 1 : 0,
                       transform: animationComplete ? "translateY(0)" : "translateY(20px)",
-                      transitionDelay: `${index * 50}ms`,
+                      transitionDelay: `${Math.min(index, 8) * 40}ms`,
                     }}
                   >
                     <td className="p-3">
@@ -934,7 +942,7 @@ export default function PresetEditor({
                           ) : (
                             <div className="space-y-2">
                               {selectedPreset.prompts.map((prompt: any) => (
-                                <div key={prompt.identifier} className="border border-[#534741] rounded p-3 bg-[#252220]">
+                                <div key={prompt.identifier} className="large-list-row border border-[#534741] rounded p-3 bg-[#252220]">
                                   <div className="flex justify-between items-start mb-2">
                                     <div className="flex items-center space-x-2">
                                       <button
@@ -1022,29 +1030,35 @@ export default function PresetEditor({
         </div>
       </div>
       
-      <ImportPresetModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onImport={() => {
-          setIsImportModalOpen(false);
-          loadPresetData();
-        }}
-      />
-      <CreatePresetModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={() => {
-          setIsCreateModalOpen(false);
-          loadPresetData();
-        }}
-      />
-      <EditPromptModal
-        isOpen={isEditModalOpen}
-        onClose={handleCloseEditModal}
-        presetId={selectedPreset?.id || ""}
-        prompt={currentEditingPrompt}
-        onSave={handleSaveEditPrompt}
-      />
+      {isImportModalOpen && (
+        <ImportPresetModal
+          isOpen
+          onClose={() => setIsImportModalOpen(false)}
+          onImport={() => {
+            setIsImportModalOpen(false);
+            loadPresetData();
+          }}
+        />
+      )}
+      {isCreateModalOpen && (
+        <CreatePresetModal
+          isOpen
+          onClose={() => setIsCreateModalOpen(false)}
+          onSuccess={() => {
+            setIsCreateModalOpen(false);
+            loadPresetData();
+          }}
+        />
+      )}
+      {isEditModalOpen && (
+        <EditPromptModal
+          isOpen
+          onClose={handleCloseEditModal}
+          presetId={selectedPreset?.id || ""}
+          prompt={currentEditingPrompt}
+          onSave={handleSaveEditPrompt}
+        />
+      )}
     </div>
   );
 } 

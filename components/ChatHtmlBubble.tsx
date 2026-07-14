@@ -247,6 +247,7 @@ function replaceTags(html: string) {
 interface Props {
   html: string;
   isLoading?: boolean;
+  isStreaming?: boolean;
   serifFontClass?: string;
   forceFullDocument?: boolean;
   enableStreaming?: boolean;
@@ -355,6 +356,7 @@ export function buildChatBubbleDocument(content: string): string {
 export default memo(function ChatHtmlBubble({
   html: rawHtml,
   isLoading = false,
+  isStreaming = false,
   onContentChange,
 }: Props) {
   const { serifFontClass } = useLanguage();
@@ -364,14 +366,16 @@ export default memo(function ChatHtmlBubble({
   const isFullDoc = isCompleteHtmlDocument(rawHtml);
   const hasContent = rawHtml.trim() !== "";
   const initiallySanitizedHtml = hasContent
-    ? sanitizeChatHtml(isFullDoc ? rawHtml : convertMarkdown(rawHtml))
+    ? sanitizeChatHtml(isStreaming ? rawHtml : (isFullDoc ? rawHtml : convertMarkdown(rawHtml)))
     : "";
   const formattedHtml = hasContent
-    ? (isFullDoc
+    ? (isStreaming || isFullDoc
       ? initiallySanitizedHtml
       : replaceTags(initiallySanitizedHtml).replace(/^[\s\r\n]+|[\s\r\n]+$/g, ""))
     : "";
-  const sanitizedHtml = hasContent ? sanitizeChatHtml(formattedHtml) : "";
+  const sanitizedHtml = hasContent
+    ? (isStreaming || isFullDoc ? formattedHtml : sanitizeChatHtml(formattedHtml))
+    : "";
 
   useLayoutEffect(() => {
     onContentChangeRef.current = onContentChange;
@@ -418,76 +422,6 @@ export default memo(function ChatHtmlBubble({
 
   return (
     <div className="chat-bubble-container">
-      <style jsx global>{`
-        .chat-bubble-container {
-          width: 100%;
-          position: relative;
-          max-width: 780px;
-          margin: 0 auto;
-          padding-inline: 5px;
-        }
-        .chat-html-content {
-          color: #f4e8c1;
-          font-size: 16px;
-          line-height: 1.5;
-          overflow-wrap: anywhere;
-          white-space: pre-wrap;
-        }
-        .chat-html-content img {
-          display: block;
-          height: auto;
-          max-width: 100%;
-          margin: 0 auto;
-        }
-        .chat-html-content table {
-          display: block;
-          width: 100%;
-          overflow-x: auto;
-          border-collapse: collapse;
-        }
-        .chat-html-content code,
-        .chat-html-content pre {
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
-          background: rgba(40, 40, 40, 0.8);
-          font-family: monospace;
-          font-size: 0.9rem;
-          white-space: pre-wrap;
-        }
-        .chat-html-content code { padding: 4px 8px; }
-        .chat-html-content pre { margin: 8px 0; padding: 12px; }
-        .chat-html-content blockquote {
-          margin: 8px 0;
-          padding: 8px 12px;
-          border-left: 4px solid #93c5fd;
-          background: rgba(147, 197, 253, 0.08);
-          color: #93c5fd;
-          font-style: italic;
-        }
-        .chat-html-content strong { color: #fb7185; }
-        .chat-html-content em { color: #c4b5fd; }
-        .chat-html-content talk,
-        .chat-html-content .dialogue { color: #fda4af; }
-        .chat-html-content a { color: #93c5fd; }
-        .chat-html-content .tag-styled { white-space: inherit; }
-        .chat-html-content > :first-child { margin-top: 0; }
-        .chat-html-content > :last-child { margin-bottom: 0; }
-        .chat-html-content details > summary { cursor: pointer; }
-        .chat-html-content hr { border-color: rgba(161, 141, 111, 0.35); }
-        .chat-html-content h1,
-        .chat-html-content h2,
-        .chat-html-content h3,
-        .chat-html-content h4,
-        .chat-html-content h5,
-        .chat-html-content h6 {
-          letter-spacing: 0;
-        }
-        @media (max-width: 880px) {
-          .chat-bubble-container {
-            max-width: 100%;
-          }
-        }
-      `}</style>
       <div
         ref={contentRef}
         className={`chat-html-content ${serifFontClass}`}

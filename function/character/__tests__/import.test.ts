@@ -11,6 +11,7 @@ const persistence = vi.hoisted(() => ({
   updateRegexScripts: vi.fn(),
   updateRegexScriptSettings: vi.fn(),
   deleteRegexScripts: vi.fn(),
+  createImageThumbnail: vi.fn(),
 }));
 
 vi.mock("@/lib/data/character-record-operation", () => ({
@@ -43,6 +44,10 @@ vi.mock("@/lib/data/regex-script-operation", () => ({
     updateRegexScriptSettings: persistence.updateRegexScriptSettings,
     deleteRegexScripts: persistence.deleteRegexScripts,
   },
+}));
+
+vi.mock("@/lib/media/image-thumbnail", () => ({
+  createImageThumbnail: persistence.createImageThumbnail,
 }));
 
 import { handleCharacterUpload } from "@/function/character/import";
@@ -92,6 +97,7 @@ beforeEach(() => {
   for (const mock of Object.values(persistence)) {
     mock.mockReset().mockResolvedValue(true);
   }
+  persistence.createImageThumbnail.mockResolvedValue(null);
 });
 
 describe("character import persistence", () => {
@@ -131,5 +137,18 @@ describe("character import persistence", () => {
     expect(persistence.deleteWorldBook).toHaveBeenCalledOnce();
     expect(persistence.deleteRegexScripts).toHaveBeenCalledOnce();
     expect(persistence.deleteBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it("stores a separate display thumbnail without replacing the original card image", async () => {
+    const thumbnail = new Blob(["thumbnail"], { type: "image/webp" });
+    persistence.createImageThumbnail.mockResolvedValue(thumbnail);
+
+    const result = await handleCharacterUpload(charXFixture(), { protagonistName: "Alice" });
+
+    expect(result.imagePath).toMatch(/\.png$/);
+    expect(result.thumbnailPath).toMatch(/\/thumbnail\.webp$/);
+    expect(persistence.setBlob).toHaveBeenCalledWith(result.imagePath, expect.any(Blob));
+    expect(persistence.setBlob).toHaveBeenCalledWith(result.thumbnailPath, thumbnail);
+    expect(persistence.createCharacter.mock.calls[0][4]).toBe(result.thumbnailPath);
   });
 });

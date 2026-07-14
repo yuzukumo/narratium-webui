@@ -189,6 +189,8 @@ func (a *API) failChatRunSetup(runID, code, message string) {
 	})
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		a.logger.Error("persist failed chat run setup", "error", err, "run_id", runID)
+	} else if err == nil {
+		a.notifyChatRun(runID)
 	}
 }
 
@@ -288,9 +290,11 @@ func (a *API) executeChatRun(ctx context.Context, prepared preparedChatRequest, 
 					firstTokenMS = &value
 				}
 			}
-			if len(text)-lastPersistedLength >= 256 || time.Since(lastPersisted) >= 200*time.Millisecond {
+			if len(text)-lastPersistedLength >= 512 || time.Since(lastPersisted) >= 500*time.Millisecond {
 				if persistErr := a.repo.UpdateChatRunProgress(context.Background(), run.ID, text, firstTokenMS); persistErr != nil && !errors.Is(persistErr, store.ErrNotFound) {
 					a.logger.Warn("persist chat run progress failed", "error", persistErr, "run_id", run.ID)
+				} else if persistErr == nil {
+					a.notifyChatRun(run.ID)
 				}
 				lastPersisted, lastPersistedLength = time.Now(), len(text)
 			}
@@ -375,6 +379,8 @@ func (a *API) finishChatRunWithStatus(
 	})
 	if updateErr != nil && !errors.Is(updateErr, store.ErrNotFound) {
 		a.logger.Error("persist background chat run result failed", "error", updateErr, "run_id", run.ID)
+	} else if updateErr == nil {
+		a.notifyChatRun(run.ID)
 	}
 }
 
@@ -426,7 +432,8 @@ func (a *API) getChatRun(c *gin.Context) {
 
 func (a *API) chatRunEvents(c *gin.Context) {
 	runID := c.Param("id")
-	if _, err := a.repo.ChatRunByID(c.Request.Context(), currentUser(c).ID, runID); errors.Is(err, store.ErrNotFound) {
+	userID := currentUser(c).ID
+	if _, err := a.repo.ChatRunByID(c.Request.Context(), userID, runID); errors.Is(err, store.ErrNotFound) {
 		writeError(c, http.StatusNotFound, "chat_run_not_found", "Generation not found.")
 		return
 	} else if err != nil {
@@ -440,12 +447,14 @@ func (a *API) chatRunEvents(c *gin.Context) {
 	c.Status(http.StatusOK)
 	flusher, _ := c.Writer.(http.Flusher)
 	lastRevision := int64(0)
+	updates, unsubscribe := a.subscribeChatRun(runID)
+	defer unsubscribe()
 	heartbeat := time.NewTicker(15 * time.Second)
-	poll := time.NewTicker(250 * time.Millisecond)
+	poll := time.NewTicker(2 * time.Second)
 	defer heartbeat.Stop()
 	defer poll.Stop()
 	for {
-		run, err := a.repo.ChatRunByID(c.Request.Context(), currentUser(c).ID, runID)
+		run, err := a.repo.ChatRunByID(c.Request.Context(), userID, runID)
 		if errors.Is(err, store.ErrNotFound) {
 			_ = writeSSE(c, gin.H{"type": "error", "code": "chat_run_not_found", "message": "Generation not found."})
 			return
@@ -468,6 +477,7 @@ func (a *API) chatRunEvents(c *gin.Context) {
 		select {
 		case <-c.Request.Context().Done():
 			return
+		case <-updates:
 		case <-poll.C:
 		case <-heartbeat.C:
 			if _, err := fmt.Fprint(c.Writer, ": keep-alive\n\n"); err != nil {
@@ -494,7 +504,38 @@ func (a *API) cancelChatRun(c *gin.Context) {
 		a.markChatRunExplicitlyCanceled(run.ID)
 		a.cancelRegisteredChatRun(run.ID)
 	}
+	a.notifyChatRun(run.ID)
 	c.JSON(http.StatusOK, gin.H{"run": run})
+}
+
+func (a *API) subscribeChatRun(id string) (<-chan struct{}, func()) {
+	updates := make(chan struct{}, 1)
+	a.runMu.Lock()
+	if a.runSubscribers[id] == nil {
+		a.runSubscribers[id] = make(map[chan struct{}]struct{})
+	}
+	a.runSubscribers[id][updates] = struct{}{}
+	a.runMu.Unlock()
+
+	return updates, func() {
+		a.runMu.Lock()
+		delete(a.runSubscribers[id], updates)
+		if len(a.runSubscribers[id]) == 0 {
+			delete(a.runSubscribers, id)
+		}
+		a.runMu.Unlock()
+	}
+}
+
+func (a *API) notifyChatRun(id string) {
+	a.runMu.Lock()
+	defer a.runMu.Unlock()
+	for subscriber := range a.runSubscribers[id] {
+		select {
+		case subscriber <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (a *API) acknowledgeChatRun(c *gin.Context) {

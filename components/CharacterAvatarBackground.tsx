@@ -1,39 +1,8 @@
-import { useEffect, useState } from "react";
-import { getBlob } from "@/lib/data/local-storage";
+import { memo } from "react";
+import { useBlobUrl } from "@/lib/data/blob-url-cache";
 
-export function CharacterAvatarBackground({ avatarPath }: { avatarPath: string }) {
-  const [bgUrl, setBgUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let objectUrl: string;
-
-    async function loadImage() {
-      try {
-        const blob = await getBlob(avatarPath);
-        if (cancelled) {
-          return;
-        }
-        if (blob) {
-          objectUrl = URL.createObjectURL(blob);
-          setBgUrl(objectUrl);
-        } else {
-          console.warn("Avatar blob not found for", avatarPath);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to load avatar blob:", error);
-        }
-      }
-    }
-
-    void loadImage();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [avatarPath]);
+export const CharacterAvatarBackground = memo(function CharacterAvatarBackground({ avatarPath }: { avatarPath: string }) {
+  const bgUrl = useBlobUrl(avatarPath);
 
   return (
     <div
@@ -41,4 +10,4 @@ export function CharacterAvatarBackground({ avatarPath }: { avatarPath: string }
       style={{ backgroundImage: bgUrl ? `url(${bgUrl})` : undefined }}
     />
   );
-}
+});

@@ -14,16 +14,14 @@
  * before being redirected to the creator area.
  * 
  * Dependencies:
- * - framer-motion: For animation effects
  * - lucide-react: For icons (Send, Sparkles)
  * - next/navigation: For routing
- * - Background images: background_yellow.png, background_red.png
+ * - Background images: background_yellow.webp, background_red.webp
  */
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState } from "react";
 import { Send, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "../i18n";
@@ -34,29 +32,10 @@ export default function CreatorInputPage() {
   const { t, fontClass, serifFontClass, titleFontClass } = useLanguage();
 
   // State management
-  const [mounted, setMounted] = useState(false);
-  const [imagesLoaded, setImagesLoaded] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   // Mode: 'custom' or 'agent' for the new toggle
   const [mode, setMode] = useState<"custom" | "agent">("custom");
-
-  // Preload background images and handle mounting state
-  useEffect(() => {
-    setMounted(true);
-    const yellowImg = new Image();
-    const redImg = new Image();
-    
-    yellowImg.src = "/background_yellow.png";
-    redImg.src = "/background_red.png";
-    
-    Promise.all([
-      new Promise(resolve => yellowImg.onload = resolve),
-      new Promise(resolve => redImg.onload = resolve),
-    ]).then(() => {
-      setImagesLoaded(true);
-    });
-  }, []);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -79,17 +58,13 @@ export default function CreatorInputPage() {
     }
   };
 
-  if (!mounted) return null;
-
   return (
     <div className="min-h-screen w-full h-full overflow-auto login-fantasy-bg relative flex flex-col items-center justify-center">
       {/* Yellow background layer with fade-in effect */}
       <div
-        className={`absolute inset-0 z-0 opacity-35 transition-opacity duration-500 ${
-          imagesLoaded ? "opacity-35" : "opacity-0"
-        }`}
+        className="absolute inset-0 z-0 opacity-35"
         style={{
-          backgroundImage: "url('/background_yellow.png')",
+          backgroundImage: "url('/background_yellow.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -98,11 +73,9 @@ export default function CreatorInputPage() {
 
       {/* Red background layer with multiply blend mode */}
       <div
-        className={`absolute inset-0 z-1 opacity-45 transition-opacity duration-500 ${
-          imagesLoaded ? "opacity-45" : "opacity-0"
-        }`}
+        className="absolute inset-0 z-1 opacity-45"
         style={{
-          backgroundImage: "url('/background_red.png')",
+          backgroundImage: "url('/background_red.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -113,11 +86,8 @@ export default function CreatorInputPage() {
       {/* Main content container */}
       <div className="flex flex-col items-center justify-center w-full max-w-4xl px-4 py-8 relative z-10">
         {/* Header section with animated title */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-center mb-12"
+        <div
+          className="ui-enter-up text-center mb-12"
         >
           <h1 className={"text-3xl md:text-5xl font-bold mb-4 font-cinzel bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300 drop-shadow-[0_0_10px_rgba(251,146,60,0.5)]"}>
             {t("creatorInput.title")}
@@ -125,14 +95,12 @@ export default function CreatorInputPage() {
           <p className={`text-[#c0a480] text-sm md:text-base ${serifFontClass} italic`}>
             {t("creatorInput.subtitle")}
           </p>
-        </motion.div>
+        </div>
 
         {/* Input form section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.3 }}
-          className="w-full max-w-2xl"
+        <div
+          style={{ animationDelay: "300ms" }}
+          className="ui-enter-up w-full max-w-2xl"
         >
           <form onSubmit={handleSubmit} className="relative">
             {/* Text input area with new structure */}
@@ -215,7 +183,7 @@ export default function CreatorInputPage() {
               <span className={`text-[#c0a480]/60 text-xs ${fontClass}`}>{t("creatorInput.exampleStories")}</span>
             </div>
           </form>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

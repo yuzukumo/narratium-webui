@@ -22,14 +22,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useLanguage } from "@/app/i18n";
-import { motion } from "framer-motion";
-import ImportCharacterModal from "@/components/ImportCharacterModal";
-import EditCharacterModal from "@/components/EditCharacterModal";
 import CharacterCardGrid from "@/components/CharacterCardGrid";
 import { getAllCharacters } from "@/function/character/list";
 import { deleteCharacter } from "@/function/character/delete";
 import { trackButtonClick } from "@/utils/google-analytics";
+
+const ImportCharacterModal = dynamic(() => import("@/components/ImportCharacterModal"));
+const EditCharacterModal = dynamic(() => import("@/components/EditCharacterModal"));
 
 /**
  * Interface defining the structure of a character object
@@ -64,24 +65,6 @@ export default function CharacterCards() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentCharacter, setCurrentCharacter] = useState<Character | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const [imagesLoaded, setImagesLoaded] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const yellowImg = new Image();
-    const redImg = new Image();
-    
-    yellowImg.src = "/background_yellow.png";
-    redImg.src = "/background_red.png";
-    
-    Promise.all([
-      new Promise(resolve => yellowImg.onload = resolve),
-      new Promise(resolve => redImg.onload = resolve),
-    ]).then(() => {
-      setImagesLoaded(true);
-    });
-  }, []);
 
   const fetchCharacters = async () => {
     setIsLoading(true);
@@ -134,16 +117,12 @@ export default function CharacterCards() {
     fetchCharacters();
   }, [language]);
 
-  if (!mounted) return null;
-
   return (
     <div className="h-full w-full overflow-x-hidden overflow-y-hidden login-fantasy-bg relative">
       <div
-        className={`absolute inset-0 z-0 opacity-35 transition-opacity duration-500 ${
-          imagesLoaded ? "opacity-35" : "opacity-0"
-        }`}
+        className="absolute inset-0 z-0 opacity-35"
         style={{
-          backgroundImage: "url('/background_yellow.png')",
+          backgroundImage: "url('/background_yellow.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -151,11 +130,9 @@ export default function CharacterCards() {
       />
 
       <div
-        className={`absolute inset-0 z-1 opacity-45 transition-opacity duration-500 ${
-          imagesLoaded ? "opacity-45" : "opacity-0"
-        }`}
+        className="absolute inset-0 z-1 opacity-45"
         style={{
-          backgroundImage: "url('/background_red.png')",
+          backgroundImage: "url('/background_red.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
@@ -166,18 +143,15 @@ export default function CharacterCards() {
       <div className="h-full w-full overflow-y-auto">
         <div className="flex flex-col items-center justify-start w-full py-8">
           <div className="w-full max-w-4xl relative z-10 px-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center mb-8"
+            <div
+              className="ui-enter-up flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center mb-8"
             >
               <div className="flex items-center gap-3">
                 <h1 className={`text-xl sm:text-2xl magical-login-text ${serifFontClass}`}>{t("sidebar.characterCards")}</h1>
               </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
-                <motion.div
-                  className={`portal-button relative overflow-hidden px-4 py-2 rounded-lg cursor-pointer text-center ${fontClass}
+                <div
+                  className={`portal-button relative overflow-hidden px-4 py-2 rounded-lg cursor-pointer text-center transition-transform active:scale-[0.98] hover:scale-[1.01] ${fontClass}
                     bg-gradient-to-b from-[#2a231c] to-[#1a1510]
                     border border-[#534741]
                     shadow-[0_0_15px_rgba(192,164,128,0.1)]
@@ -185,43 +159,28 @@ export default function CharacterCards() {
                     before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-[rgba(192,164,128,0.1)] before:to-transparent
                     before:translate-x-[-100%] hover:before:translate-x-[100%] before:transition-transform before:duration-700
                     group`}
-                  whileHover={{ 
-                    scale: 1.01,
-                    boxShadow: "0 0 25px rgba(192,164,128,0.3)",
-                  }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ 
-                    type: "spring", 
-                    stiffness: 400, 
-                    damping: 10, 
-                  }}
                   onClick={() => setIsImportModalOpen(true)}
                 >
                   <span className="relative z-10 text-[#c0a480] group-hover:text-[#ffd475] transition-colors duration-300">
                     {t("characterCardsPage.importCharacter")}
                   </span>
-                </motion.div>
+                </div>
               </div>
-            </motion.div>
+            </div>
 
             {isLoading ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex justify-center items-center h-64"
+              <div
+                className="ui-fade-in flex justify-center items-center h-64"
               >
                 <div className="relative w-16 h-16">
                   <div className="absolute inset-0 rounded-full border-2 border-t-[#f9c86d] border-r-[#c0a480] border-b-[#a18d6f] border-l-transparent animate-spin"></div>
                   <div className="absolute inset-2 rounded-full border-2 border-t-[#a18d6f] border-r-[#f9c86d] border-b-[#c0a480] border-l-transparent animate-spin-slow"></div>
                   <div className={`absolute w-full text-center top-20 text-[#c0a480] ${fontClass}`}>{t("characterCardsPage.loading")}</div>
                 </div>
-              </motion.div>
+              </div>
             ) : characters.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="session-card p-8 text-center"
+              <div
+                className="ui-enter-up session-card p-8 text-center"
               >
                 <div className="mb-6 opacity-60">
                   <svg className="mx-auto" width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -229,15 +188,13 @@ export default function CharacterCards() {
                   </svg>
                 </div>
                 <p className={`text-[#eae6db] mb-6 ${serifFontClass}`}>{t("characterCardsPage.noCharacters")}</p>
-                <motion.div
-                  className={`portal-button inline-block text-[#c0a480] hover:text-[#ffd475] px-5 py-2 border border-[#534741] rounded-lg cursor-pointer ${fontClass}`}
-                  whileHover={{ scale: 1.05 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                <div
+                  className={`portal-button inline-block text-[#c0a480] hover:text-[#ffd475] hover:scale-105 transition-transform px-5 py-2 border border-[#534741] rounded-lg cursor-pointer ${fontClass}`}
                   onClick={() => setIsImportModalOpen(true)}
                 >
                   {t("characterCardsPage.importFirstCharacter")}
-                </motion.div>
-              </motion.div>
+                </div>
+              </div>
             ) : (
               <CharacterCardGrid
                 characters={characters}
@@ -247,14 +204,16 @@ export default function CharacterCards() {
             )}
           </div>
 
-          <ImportCharacterModal
-            isOpen={isImportModalOpen}
-            onClose={() => setIsImportModalOpen(false)}
-            onImport={fetchCharacters}
-          />
-          {currentCharacter && (
+          {isImportModalOpen && (
+            <ImportCharacterModal
+              isOpen
+              onClose={() => setIsImportModalOpen(false)}
+              onImport={fetchCharacters}
+            />
+          )}
+          {currentCharacter && isEditModalOpen && (
             <EditCharacterModal
-              isOpen={isEditModalOpen}
+              isOpen
               onClose={() => setIsEditModalOpen(false)}
               characterId={currentCharacter.id}
               characterData={{

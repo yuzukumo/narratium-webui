@@ -18,6 +18,7 @@ export class Character {
   worldBook: WorldBookEntry[] | Record<string, WorldBookEntry>;
   worldBookSettings: CharacterWorldBookSettings;
   imagePath: string;
+  thumbnailPath?: string;
   readonly protagonistName?: string;
   
   constructor(characterRecord: CharacterRecord) {
@@ -25,6 +26,7 @@ export class Character {
     const data = card.data;
     this.id = characterRecord.id;
     this.imagePath = characterRecord.imagePath;
+    this.thumbnailPath = characterRecord.thumbnailPath;
     this.protagonistName = characterRecord.protagonistName?.trim() || undefined;
     this.characterData = {
       name: data.name,

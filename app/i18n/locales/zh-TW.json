@@ -5,8 +5,6 @@
     "close": "關閉",
     "return": "返回",
     "settings": "設定",
-    "soundOn": "聲音打開",
-    "soundOff": "聲音關閉",
     "saving": "儲存..."
   },
   "userMenu": {
@@ -26,9 +24,7 @@
     },
     "general": {
       "language": "語言",
-      "sound": "介面聲音",
-      "soundOn": "開啟",
-      "soundOff": "關閉", "avatarUpload": "上傳頭像", "avatarUploading": "上傳中...", "avatarHint": "PNG、JPEG、WebP 或 GIF，最大 4 MB", "avatarInvalid": "請選擇不超過 4 MB 的圖片。", "avatarSaved": "頭像已更新", "avatarError": "頭像更新失敗。", "availableBalance": "可用額度", "refreshBalance": "重新整理額度", "name": "顯示名稱", "editName": "修改顯示名稱", "saveName": "儲存顯示名稱", "nameSaved": "顯示名稱已更新", "nameError": "無法更新顯示名稱。"
+      "avatarUpload": "上傳頭像", "avatarUploading": "上傳中...", "avatarHint": "PNG、JPEG、WebP 或 GIF，最大 4 MB", "avatarInvalid": "請選擇不超過 4 MB 的圖片。", "avatarSaved": "頭像已更新", "avatarError": "頭像更新失敗。", "availableBalance": "可用額度", "refreshBalance": "重新整理額度", "name": "顯示名稱", "editName": "修改顯示名稱", "saveName": "儲存顯示名稱", "nameSaved": "顯示名稱已更新", "nameError": "無法更新顯示名稱。"
     },
     "usage": {
       "title": "使用日誌", "description": "目前帳戶的模型請求與計費明細。",
@@ -40,8 +36,6 @@
   "notifications": {
     "signOutSuccess": "已退出",
     "signOutError": "無法退出。請再試一次。",
-    "soundEnabled": "已儲存聲音設定：開",
-    "soundDisabled": "已儲存聲音設定：關閉",
     "languageSaved": "已儲存語言首選項",
     "modelSelectedNextRequest": "型號已更改並將適用於下一個請求",
     "responseLengthSaved": "已儲存回覆長度偏好"
@@ -566,6 +560,7 @@
     "startConversation": "開始對話...",
     "send": "傳送",
     "stopGeneration": "停止生成",
+    "generationStopped": "已停止生成。",
     "scrollToBottom": "捲動到底部",
     "contextUsage": "上下文用量",
     "isTyping": "正在輸入...",

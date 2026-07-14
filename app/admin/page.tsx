@@ -6,9 +6,11 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import claudeIcon from "@lobehub/icons-static-svg/icons/claude-color.svg";
 import geminiIcon from "@lobehub/icons-static-svg/icons/gemini-color.svg";
@@ -29,7 +31,6 @@ import {
 import { toast } from "react-hot-toast";
 import { useLanguage } from "@/app/i18n";
 import { LANGUAGE_LOCALES } from "@/lib/i18n/languages";
-import UserEditorDrawer from "@/components/admin/UserEditorDrawer";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModels } from "@/contexts/ModelContext";
@@ -46,6 +47,8 @@ import {
   multiplyMicrousdByMultiplier,
   parseUSDToMicrousd,
 } from "@/utils/money";
+
+const UserEditorDrawer = dynamic(() => import("@/components/admin/UserEditorDrawer"));
 
 interface ProviderConfig {
   id: string;
@@ -597,6 +600,21 @@ export default function AdminPage() {
     }
   };
 
+  const activeAdminCount = useMemo(() => users.filter((item) => (
+    item.role === "admin" && item.status === "active"
+  )).length, [users]);
+  const numberFormat = useMemo(
+    () => new Intl.NumberFormat(LANGUAGE_LOCALES[language]),
+    [language],
+  );
+  const dateTimeFormat = useMemo(
+    () => new Intl.DateTimeFormat(LANGUAGE_LOCALES[language], {
+      dateStyle: "medium",
+      timeStyle: "medium",
+    }),
+    [language],
+  );
+
   if (user?.role !== "admin") {
     return null;
   }
@@ -610,9 +628,6 @@ export default function AdminPage() {
     { value: "responses", label: t("admin.channels.apiFormats.responses") },
     { value: "chat_completions", label: t("admin.channels.apiFormats.chatCompletions") },
   ];
-  const activeAdminCount = users.filter((item) => (
-    item.role === "admin" && item.status === "active"
-  )).length;
   const tabs = [
     { id: "providers" as const, label: t("admin.tabs.channels"), Icon: KeyRound },
     { id: "models" as const, label: t("admin.tabs.models"), Icon: BrainCircuit },
@@ -709,7 +724,7 @@ export default function AdminPage() {
                 </thead>
                 <tbody className="divide-y divide-[#534741]/40">
                   {providers.map((provider) => (
-                    <tr key={provider.id} className="bg-[#1d1a18] transition-colors hover:bg-[#28231f]">
+                    <tr key={provider.id} className="large-list-row bg-[#1d1a18] transition-colors hover:bg-[#28231f]">
                       <td className="px-3 py-3 font-mono text-xs tabular-nums text-[#d9b16b]">{provider.channel_id}</td>
                       <td className="max-w-64 px-3 py-3">
                         <span className="block truncate text-[#eae6db]">{provider.name}</span>
@@ -832,7 +847,7 @@ export default function AdminPage() {
                 </thead>
                 <tbody className="divide-y divide-[#534741]/40">
 				  {adminModels.map((model) => (
-                    <tr key={model.id} className="bg-[#1d1a18] transition-colors hover:bg-[#28231f]">
+                    <tr key={model.id} className="large-list-row bg-[#1d1a18] transition-colors hover:bg-[#28231f]">
 					  <td className="max-w-72 px-3 py-3">
 	                        <span className="block truncate font-mono text-xs text-[#eae6db]" title={model.external_id}>{model.external_id}</span>
 					  </td>
@@ -845,12 +860,12 @@ export default function AdminPage() {
                         </div>
 					  </td>
 					  <td className="px-3 py-3 tabular-nums text-[#d8c9b3]">
-                        <span className="block">{model.capabilities.context_window ? new Intl.NumberFormat().format(model.capabilities.context_window) : "—"}</span>
+                        <span className="block">{model.capabilities.context_window ? numberFormat.format(model.capabilities.context_window) : "—"}</span>
                         <span className="mt-0.5 block text-[11px] text-[#817361]">
-                          {t("admin.models.compactionShort")} {model.capabilities.compaction_threshold ? new Intl.NumberFormat().format(model.capabilities.compaction_threshold) : "—"}
+                          {t("admin.models.compactionShort")} {model.capabilities.compaction_threshold ? numberFormat.format(model.capabilities.compaction_threshold) : "—"}
                         </span>
 	                      </td>
-					  <td className="px-3 py-3 tabular-nums text-[#d8c9b3]">{model.capabilities.max_output_tokens ? new Intl.NumberFormat().format(model.capabilities.max_output_tokens) : "—"}</td>
+					  <td className="px-3 py-3 tabular-nums text-[#d8c9b3]">{model.capabilities.max_output_tokens ? numberFormat.format(model.capabilities.max_output_tokens) : "—"}</td>
 					  <td className="px-3 py-3 font-mono text-[11px] text-[#a99a83]">
 	                        <span className="block">{t("admin.models.pricingShort.input")} {model.capabilities.context_window ? `$${microusdToUSDInput(model.pricing.input_microusd_per_million)}` : "—"}</span>
 	                        <span className="mt-0.5 block">{t("admin.models.pricingShort.output")} {model.capabilities.context_window ? `$${microusdToUSDInput(model.pricing.output_microusd_per_million)}` : "—"}</span>
@@ -939,7 +954,7 @@ export default function AdminPage() {
                 </thead>
                 <tbody className="divide-y divide-[#534741]/40">
                   {users.map((target) => (
-                    <tr key={target.id} className="bg-[#1d1a18] transition-colors hover:bg-[#28231f]">
+                    <tr key={target.id} className="large-list-row bg-[#1d1a18] transition-colors hover:bg-[#28231f]">
                       <td className="max-w-64 px-3 py-3 text-[#eae6db]">
                         <span className="block truncate">{target.name}</span>
                         {target.email && <span className="mt-0.5 block truncate text-xs text-[#817361]">{target.email}</span>}
@@ -970,7 +985,7 @@ export default function AdminPage() {
                         )}
                       </td>
                       <td className="px-3 py-3 text-xs text-[#a18d6f]">
-                        {new Date(target.created_at).toLocaleString(LANGUAGE_LOCALES[language])}
+                        {dateTimeFormat.format(new Date(target.created_at))}
                       </td>
                       <td className="px-3 py-3 text-right">
                         <button

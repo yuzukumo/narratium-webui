@@ -52,10 +52,10 @@ function DialogueNodeComponent({ id, data }: NodeProps<DialogueNode>) {
   const [isJumping, setIsJumping] = useState(false);
   const [showRootTooltip, setShowRootTooltip] = useState(false);
   
-  const steps = data.label
+  const steps = useMemo(() => data.label
     .split(/——>|-->|->/)
     .map(step => step.trim())
-    .filter(step => step.length > 0);
+    .filter(step => step.length > 0), [data.label]);
 
   const handleNodeClick = () => {
     data.onEditClick(id);
@@ -240,6 +240,12 @@ const DialogueFlowStyles = () => (
       animation: flowLineOther 2s linear infinite !important;
       opacity: 0.8 !important;
     }
+
+    .react-flow__edge.static-edge path {
+      animation: none !important;
+      filter: none !important;
+      stroke-dasharray: none !important;
+    }
     
     @keyframes flowLineRoot {
       from {
@@ -292,7 +298,7 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
   const defaultEdgeOptions = useMemo(() => ({
     type: "smoothstep", 
     style: { stroke: "#ef4444", strokeWidth: 3 },
-    animated: true,
+    animated: false,
   }), []);
 
   const reactFlowInstanceRef = useRef<ReactFlowInstance<DialogueNode, Edge> | null>(null);
@@ -443,25 +449,27 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
         return;
       }
 
-      const currentPathNodeIds: string[] = [];
+      const nodeMap = new Map<string, any>(allNodes.map((node: any) => [node.node_id, node]));
+      const currentPathNodeIds = new Set<string>();
       let tempNodeId = currentNodeId;
       
       while (tempNodeId !== "root") {
-        currentPathNodeIds.push(tempNodeId);
-        const node = allNodes.find((n: { node_id: any; }) => n.node_id === tempNodeId);
+        if (currentPathNodeIds.has(tempNodeId)) break;
+        currentPathNodeIds.add(tempNodeId);
+        const node = nodeMap.get(tempNodeId);
         if (!node) break;
         tempNodeId = node.parent_node_id;
       }
+      currentPathNodeIds.add("root");
       
       const nodeWidth = 220;
       const nodeHeight = 120;
       const newNodes: DialogueNode[] = [];
       const newEdges: Edge[] = [];
 
-      const nodeMap: Record<string, any> = {};
-      allNodes.forEach((node: any) => {
-        nodeMap[node.node_id] = node;
-      });
+      const rootChildren = allNodes.filter((node: any) => node.parent_node_id === "root");
+      const rootChildIndexes = new Map(rootChildren.map((node: any, index: number) => [node.node_id, index]));
+      const animateEdges = allNodes.length <= 60;
       
       const calculateOptimalLayout = (nodeCount: number) => {
         const columns = nodeCount <= 3 ? 1 : Math.max(1, Math.round(Math.sqrt(nodeCount)));
@@ -498,14 +506,13 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
         const yPos = (row * (nodeHeight + verticalGap)) - (gridHeight / 2) + (nodeHeight / 2);
 
         const nodeId = node.node_id;
-        const isCurrentPath = currentPathNodeIds.includes(nodeId);
+        const isCurrentPath = currentPathNodeIds.has(nodeId);
         
         let label = "";
         if (node.node_id === "root") {
           label = "root";
         } else if (node.parent_node_id === "root") {
-          const rootChildren = allNodes.filter((n: any) => n.parent_node_id === "root");
-          const rootChildIndex = rootChildren.findIndex((n: any) => n.node_id === node.node_id);
+          const rootChildIndex = rootChildIndexes.get(node.node_id) ?? 0;
           const rootChildrenCount = rootChildren.length;
           
           label = `${t("dialogue.startingPoint")}${rootChildrenCount - rootChildIndex}${rootChildrenCount > 1 ? `/${rootChildrenCount}` : ""}`;
@@ -531,8 +538,8 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
             userInput: (node.user_input.match(/<input_message>([\s\S]*?)<\/input_message>/)?.[1] || "").replace(/^[\s\n\r]*((<[^>]+>\s*)*)?(玩家输入指令|Player Input)[:：]\s*/i, ""),
             assistantResponse: node.assistant_response || "",
             parsedContent: node.parsed_content || {},
-            onEditClick: (id: string) => handleEditNode(id),
-            onJumpClick: (id: string) => handleJumpToNode(id),
+            onEditClick: handleEditNode,
+            onJumpClick: handleJumpToNode,
             isCurrentPath: isCurrentPath,
             characterId: characterId,
           },
@@ -549,8 +556,8 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
           const sourceId = node.parent_node_id;
           const targetId = node.node_id;
           
-          if (nodeMap[sourceId] && nodeMap[targetId]) {
-            const isCurrentPathEdge = currentPathNodeIds.includes(sourceId) && currentPathNodeIds.includes(targetId);
+          if (nodeMap.has(sourceId) && nodeMap.has(targetId)) {
+            const isCurrentPathEdge = currentPathNodeIds.has(sourceId) && currentPathNodeIds.has(targetId);
             
             const isRootSource = sourceId === "root";
             let edgeStroke, edgeLabelStroke, edgeLabelFill;
@@ -598,7 +605,7 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
                 strokeWidth: isCurrentPathEdge || isRootSource ? 3 : 2, 
               },
               animated: false,
-              className: edgeClass,
+              className: `${edgeClass}${animateEdges ? "" : " static-edge"}`,
               type: "smoothstep",
             });
           }
@@ -751,6 +758,7 @@ export default function DialogueTreeModal({ isOpen, onClose, characterId, onDial
             proOptions={{ hideAttribution: true }}
             connectionLineType={ConnectionLineType.SmoothStep}
             defaultEdgeOptions={defaultEdgeOptions}
+            onlyRenderVisibleElements
             ref={flowRef}
           >
             <MiniMap 

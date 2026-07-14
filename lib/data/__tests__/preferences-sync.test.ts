@@ -66,7 +66,7 @@ describe("preference ownership initialization", () => {
     const storage = new MemoryStorage({
       [PREFERENCES_OWNER_KEY]: "account-a",
       language: "en",
-      soundEnabled: "false",
+      sidebarState: "closed",
     });
     const transport: PreferencesTransport = {
       load: vi.fn(async () => document({}, 0)),
@@ -77,7 +77,7 @@ describe("preference ownership initialization", () => {
 
     expect(transport.save).not.toHaveBeenCalled();
     expect(storage.getItem("language")).toBeNull();
-    expect(storage.getItem("soundEnabled")).toBeNull();
+    expect(storage.getItem("sidebarState")).toBeNull();
     expect(storage.getItem(PREFERENCES_OWNER_KEY)).toBe("account-b");
   });
 
@@ -103,10 +103,10 @@ describe("preference ownership initialization", () => {
   });
 
   it("uses the backend copy when another device wins first-write migration", async () => {
-    const storage = new MemoryStorage({ language: "en", soundEnabled: "false" });
+    const storage = new MemoryStorage({ language: "en", responseLength: "2048" });
     const load = vi.fn()
       .mockResolvedValueOnce(document({}, 0))
-      .mockResolvedValueOnce(document({ language: "zh", soundEnabled: "true" }, 1));
+      .mockResolvedValueOnce(document({ language: "zh", responseLength: "4096" }, 1));
     const save = vi.fn(async () => {
       throw new APIError(409, "revision_conflict", "conflict");
     });
@@ -114,7 +114,7 @@ describe("preference ownership initialization", () => {
     await initializePreferenceStorage("account-a", storage, { load, save });
 
     expect(storage.getItem("language")).toBe("zh");
-    expect(storage.getItem("soundEnabled")).toBe("true");
+    expect(storage.getItem("responseLength")).toBe("4096");
     expect(load).toHaveBeenCalledTimes(2);
   });
 });
@@ -134,13 +134,13 @@ describe("preference synchronization session", () => {
     const resume = await pausePreferencesForAccountChange();
 
     expect(save).toHaveBeenCalledWith({ responseLength: "2048" }, 0);
-    session.set("soundEnabled", "false");
+    session.set("sidebarState", "closed");
     expect(save).toHaveBeenCalledTimes(1);
 
     resume();
-    session.set("soundEnabled", "false");
+    session.set("sidebarState", "closed");
     await session.flushPending();
-    expect(save).toHaveBeenLastCalledWith({ responseLength: "2048", soundEnabled: "false" }, 1);
+    expect(save).toHaveBeenLastCalledWith({ responseLength: "2048", sidebarState: "closed" }, 1);
 
     unregister();
     await session.closeAndFlush();
@@ -157,13 +157,13 @@ describe("preference synchronization session", () => {
       save,
     });
 
-    session.set("soundEnabled", "false");
+    session.set("sidebarState", "closed");
     await session.flushPending();
 
-    expect(save).toHaveBeenNthCalledWith(1, { responseLength: "2048", soundEnabled: "false" }, 1);
+    expect(save).toHaveBeenNthCalledWith(1, { responseLength: "2048", sidebarState: "closed" }, 1);
     expect(save).toHaveBeenNthCalledWith(2, {
       futurePreference: "preserved",
-      soundEnabled: "false",
+      sidebarState: "closed",
     }, 2);
     await session.closeAndFlush();
   });

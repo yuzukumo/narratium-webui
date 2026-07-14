@@ -22,7 +22,7 @@ export async function getAllCharacters(language: Language) {
           created_at: character.created_at,
           updated_at: character.updated_at,
           last_used_at: character.last_used_at,
-          avatar_path: character.imagePath,
+          avatar_path: character.thumbnailPath || character.imagePath,
         };
         const processedData = adaptCharacterData(
           characterData,

@@ -47,10 +47,12 @@ describe("protagonist names", () => {
       normalizeCharacterCard({ data: { name: "Nova" } }),
       "character-1.png",
       "  Alice  ",
+      "characters/character-1/thumbnail.webp",
     );
 
     expect(created.protagonistName).toBe("Alice");
     expect((storage.records[0] as CharacterRecord).protagonistName).toBe("Alice");
+    expect((storage.records[0] as CharacterRecord).thumbnailPath).toBe("characters/character-1/thumbnail.webp");
   });
 
   it("preserves the imported name even when an update payload tries to replace it", async () => {

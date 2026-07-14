@@ -8,6 +8,7 @@ export interface CharacterRecord {
   readonly protagonistName?: string;
   data: RawCharacterData;
   imagePath: string;
+  thumbnailPath?: string;
   created_at: string;
   updated_at: string;
   last_used_at?: string;
@@ -35,6 +36,7 @@ export class LocalCharacterRecordOperations {
     rawCharacterData: RawCharacterData,
     imagePath: string,
     protagonistName: string,
+    thumbnailPath = "",
   ): Promise<CharacterRecord> {
     const characterRecords = await readData(CHARACTERS_RECORD_FILE);
     const characterRecord: CharacterRecord = {
@@ -42,6 +44,7 @@ export class LocalCharacterRecordOperations {
       protagonistName: normalizeProtagonistName(protagonistName),
       data: normalizeCharacterCard(rawCharacterData),
       imagePath,
+      thumbnailPath: thumbnailPath || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

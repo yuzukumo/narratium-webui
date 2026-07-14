@@ -38,7 +38,6 @@ const sensitiveLegacyKeys = [
 
 const fixedPreferenceKeys = new Set([
   "language",
-  "soundEnabled",
   "characterCardsViewMode",
   "sidebarState",
   "responseLength",

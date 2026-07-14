@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "react-hot-toast";
 import { getWorldBookEntries } from "@/function/worldbook/info";
 import { deleteWorldBookEntry } from "@/function/worldbook/delete";
@@ -8,11 +9,12 @@ import { saveAdvancedWorldBookEntry } from "@/function/worldbook/edit";
 import { bulkToggleWorldBookEntries } from "@/function/worldbook/bulk-operations";
 import { getWorldBookSettings } from "@/function/worldbook/settings";
 import { useLanguage } from "@/app/i18n";
-import WorldBookEntryEditor from "@/components/WorldBookEntryEditor";
-import ImportWorldBookModal from "@/components/ImportWorldBookModal";
 import "@/app/styles/fantasy-ui.css";
 import React from "react";
 import { v4 as uuidv4 } from "uuid";
+
+const WorldBookEntryEditor = dynamic(() => import("@/components/WorldBookEntryEditor"));
+const ImportWorldBookModal = dynamic(() => import("@/components/ImportWorldBookModal"));
 
 interface WorldBookEditorProps {
   onClose: () => void;
@@ -214,11 +216,6 @@ export default function WorldBookEditor({
     return () => clearTimeout(timer);
   }, [characterId]);
 
-  useEffect(() => {
-    loadSortPreferences();
-    loadFilterPreferences();
-  }, [characterId]);
-
   const loadWorldBookData = async () => {
     try {
       setIsLoading(true);
@@ -319,8 +316,18 @@ export default function WorldBookEditor({
     return sorted;
   };
 
-  const filteredEntries = filterEntries(entries, filterBy);
-  const sortedEntries = sortEntries(filteredEntries, sortBy, sortOrder);
+  const filteredEntries = useMemo(
+    () => filterEntries(entries, filterBy),
+    [entries, filterBy],
+  );
+  const sortedEntries = useMemo(
+    () => sortEntries(filteredEntries, sortBy, sortOrder),
+    [filteredEntries, sortBy, sortOrder],
+  );
+  const entryCounts = useMemo(() => entries.reduce((counts, entry) => {
+    counts[entry.isActive ? "enabled" : "disabled"] += 1;
+    return counts;
+  }, { enabled: 0, disabled: 0 }), [entries]);
 
   const handleEditEntry = (entry?: WorldBookEntryData) => {
     if (entry) {
@@ -612,9 +619,9 @@ export default function WorldBookEditor({
             <div className={`hidden md:flex items-center space-x-2 text-xs text-[#a18d6f] ${serifFontClass} flex-shrink-0`}>
               <span className="whitespace-nowrap">{t("worldBook.totalCount")} {entries.length}</span>
               <span>•</span>
-              <span className="text-amber-400 whitespace-nowrap">{t("worldBook.enabledCount")} {entries.filter(e => e.isActive).length}</span>
+              <span className="text-amber-400 whitespace-nowrap">{t("worldBook.enabledCount")} {entryCounts.enabled}</span>
               <span>•</span>
-              <span className="text-rose-400 whitespace-nowrap">{t("worldBook.disabledCount")} {entries.filter(e => !e.isActive).length}</span>
+              <span className="text-rose-400 whitespace-nowrap">{t("worldBook.disabledCount")} {entryCounts.disabled}</span>
               {filterBy !== "all" && (
                 <>
                   <span>•</span>
@@ -624,7 +631,7 @@ export default function WorldBookEditor({
             </div>
             <div className={`md:hidden flex items-center space-x-1 text-xs text-[#a18d6f] ${serifFontClass} flex-shrink-0`}>
               <span className="bg-[#1a1816] px-2 py-1 rounded border border-[#534741] whitespace-nowrap">
-                {entries.length} / {entries.filter(e => e.isActive).length} / {entries.filter(e => !e.isActive).length}
+                {entries.length} / {entryCounts.enabled} / {entryCounts.disabled}
                 {filterBy !== "all" && ` (${filteredEntries.length})`}
               </span>
             </div>
@@ -805,11 +812,11 @@ export default function WorldBookEditor({
               {sortedEntries.map((entry, index) => (
                 <React.Fragment key={entry.entry_id}>
                   <tr 
-                    className="border-b border-[#534741] hover:bg-[#252220] transition-all duration-300 group"
+                    className="large-list-row border-b border-[#534741] hover:bg-[#252220] transition-all duration-300 group"
                     style={{
                       opacity: animationComplete ? 1 : 0,
                       transform: animationComplete ? "translateY(0)" : "translateY(20px)",
-                      transitionDelay: `${index * 50}ms`,
+                      transitionDelay: `${Math.min(index, 8) * 40}ms`,
                     }}
                   >
                     <td className="p-3">
@@ -1066,27 +1073,31 @@ export default function WorldBookEditor({
         </div>
       </div>
       
-      <WorldBookEntryEditor
-        isOpen={isEditModalOpen}
-        editingEntry={editingEntry}
-        isSaving={isSaving}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setEditingEntry(null);
-        }}
-        onSave={handleSaveEntry}
-        onEntryChange={setEditingEntry}
-      />
+      {isEditModalOpen && (
+        <WorldBookEntryEditor
+          isOpen
+          editingEntry={editingEntry}
+          isSaving={isSaving}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditingEntry(null);
+          }}
+          onSave={handleSaveEntry}
+          onEntryChange={setEditingEntry}
+        />
+      )}
       
-      <ImportWorldBookModal
-        isOpen={isImportModalOpen}
-        characterId={characterId}
-        onClose={() => setIsImportModalOpen(false)}
-        onImportSuccess={() => {
-          setIsImportModalOpen(false);
-          loadWorldBookData();
-        }}
-      />
+      {isImportModalOpen && (
+        <ImportWorldBookModal
+          isOpen
+          characterId={characterId}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportSuccess={() => {
+            setIsImportModalOpen(false);
+            loadWorldBookData();
+          }}
+        />
+      )}
     </div>
   );
 }

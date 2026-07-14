@@ -39,8 +39,17 @@ interface BlobPage {
 type BlobWriteResponse = BlobMetadata;
 
 const BLOB_PAGE_LIMIT = 200;
+const DOCUMENT_CACHE_TTL_MS = 750;
+
+interface CachedDocument {
+  value: any[];
+  revision: number;
+  expiresAt: number;
+}
 
 const revisions = new Map<string, number>();
+const documentCache = new Map<string, CachedDocument>();
+const documentRequests = new Map<string, Promise<DocumentResponse<any[]>>>();
 const blobRevisions = new Map<string, number>();
 const revisionSnapshots = new WeakMap<object, {
   generation: number;
@@ -52,9 +61,31 @@ let blobMetadataLoaded = false;
 
 export function clearDataRevisionCache(): void {
   revisions.clear();
+  documentCache.clear();
+  documentRequests.clear();
   blobRevisions.clear();
   blobMetadataLoaded = false;
   cacheGeneration += 1;
+}
+
+function cloneDocumentValue(value: unknown): any[] {
+  if (!Array.isArray(value)) return [];
+  return structuredClone(value);
+}
+
+async function fetchDocument(storeName: string): Promise<DocumentResponse<any[]>> {
+  const existing = documentRequests.get(storeName);
+  if (existing) return existing;
+
+  const request = apiJSON<DocumentResponse<any[]>>(
+    `/api/v1/data/${encodeURIComponent(storeName)}`,
+  ).finally(() => {
+    if (documentRequests.get(storeName) === request) {
+      documentRequests.delete(storeName);
+    }
+  });
+  documentRequests.set(storeName, request);
+  return request;
 }
 
 function accountChangedError(): Error {
@@ -111,10 +142,22 @@ export function inheritDataRevision(
 export async function readData(storeName: string): Promise<any[]> {
   assertDocumentStore(storeName);
   const generation = cacheGeneration;
-  const document = await apiJSON<DocumentResponse<any[]>>(`/api/v1/data/${encodeURIComponent(storeName)}`);
+  const cached = documentCache.get(storeName);
+  if (cached && cached.expiresAt > Date.now()) {
+    const data = cloneDocumentValue(cached.value);
+    rememberRevision(storeName, data, cached.revision);
+    return data;
+  }
+
+  const document = await fetchDocument(storeName);
   assertCurrentGeneration(generation);
-  const data = Array.isArray(document.value) ? document.value : [];
+  const data = cloneDocumentValue(document.value);
   revisions.set(storeName, document.revision);
+  documentCache.set(storeName, {
+    value: cloneDocumentValue(data),
+    revision: document.revision,
+    expiresAt: Date.now() + DOCUMENT_CACHE_TTL_MS,
+  });
   rememberRevision(storeName, data, document.revision);
   return data;
 }
@@ -136,11 +179,18 @@ export async function writeData(storeName: string, data: any[]): Promise<void> {
     });
     assertCurrentGeneration(generation);
     revisions.set(storeName, document.revision);
+    documentCache.set(storeName, {
+      value: cloneDocumentValue(data),
+      revision: document.revision,
+      expiresAt: Date.now() + DOCUMENT_CACHE_TTL_MS,
+    });
     rememberRevision(storeName, data, document.revision);
   } catch (error) {
     assertCurrentGeneration(generation);
     if (error instanceof APIError && error.status === 409) {
       revisions.delete(storeName);
+      documentCache.delete(storeName);
+      documentRequests.delete(storeName);
       throw new Error("Data changed on another device. Reload and retry the operation.");
     }
     throw error;

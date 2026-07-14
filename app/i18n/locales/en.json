@@ -5,8 +5,6 @@
     "close": "Close",
     "return": "Return",
     "settings": "Settings",
-    "soundOn": "Sound On",
-    "soundOff": "Sound Off",
     "saving": "Saving..."
   },
   "userMenu": {
@@ -26,9 +24,7 @@
     },
     "general": {
       "language": "Language",
-      "sound": "Interface sounds",
-      "soundOn": "On",
-      "soundOff": "Off", "avatarUpload": "Upload avatar", "avatarUploading": "Uploading...", "avatarHint": "PNG, JPEG, WebP or GIF, up to 4 MB", "avatarInvalid": "Choose an image no larger than 4 MB.", "avatarSaved": "Avatar updated", "avatarError": "Unable to update avatar.", "availableBalance": "Available quota", "refreshBalance": "Refresh quota", "name": "Display name", "editName": "Edit display name", "saveName": "Save display name", "nameSaved": "Display name updated", "nameError": "Unable to update display name."
+      "avatarUpload": "Upload avatar", "avatarUploading": "Uploading...", "avatarHint": "PNG, JPEG, WebP or GIF, up to 4 MB", "avatarInvalid": "Choose an image no larger than 4 MB.", "avatarSaved": "Avatar updated", "avatarError": "Unable to update avatar.", "availableBalance": "Available quota", "refreshBalance": "Refresh quota", "name": "Display name", "editName": "Edit display name", "saveName": "Save display name", "nameSaved": "Display name updated", "nameError": "Unable to update display name."
     },
     "usage": {
       "title": "Usage logs", "description": "Model requests and billed usage for this account.",
@@ -40,8 +36,6 @@
   "notifications": {
     "signOutSuccess": "Signed out",
     "signOutError": "Unable to sign out. Please try again.",
-    "soundEnabled": "Sound setting saved: on",
-    "soundDisabled": "Sound setting saved: off",
     "languageSaved": "Language preference saved",
     "modelSelectedNextRequest": "Model switched and will apply to the next request",
     "responseLengthSaved": "Response length preference saved"
@@ -566,6 +560,7 @@
     "startConversation": "Start a conversation...",
     "send": "Send",
     "stopGeneration": "Stop generation",
+    "generationStopped": "Generation stopped.",
     "scrollToBottom": "Scroll to bottom",
     "contextUsage": "Context usage",
     "isTyping": "is typing...",

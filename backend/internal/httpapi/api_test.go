@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -2046,6 +2047,115 @@ func TestStaticFallbackPreservesNotFoundStatus(t *testing.T) {
 				t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
 			}
 		})
+	}
+}
+
+func TestStaticFilesUseCompressionAndCachePolicies(t *testing.T) {
+	staticDir := t.TempDir()
+	assetDir := filepath.Join(staticDir, "_next", "static", "chunks")
+	if err := os.MkdirAll(assetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	assetPath := filepath.Join(assetDir, "app-abc123.js")
+	if err := os.WriteFile(assetPath, []byte("uncompressed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var compressed bytes.Buffer
+	compressor := gzip.NewWriter(&compressed)
+	if _, err := compressor.Write([]byte("compressed")); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressor.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(assetPath+".gz", compressed.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte("home"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := newHTTPTestServer(t, newTestRepository(), func(cfg *config.Config) {
+		cfg.StaticDir = staticDir
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/_next/static/chunks/app-abc123.js", nil)
+	request.Header.Set("Accept-Encoding", "gzip")
+	response := httptest.NewRecorder()
+	server.router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("content-encoding=%q, want gzip", got)
+	}
+	if got := response.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/javascript") && !strings.HasPrefix(got, "application/javascript") {
+		t.Fatalf("content-type=%q, want JavaScript", got)
+	}
+	if got := response.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("cache-control=%q", got)
+	}
+	if got := response.Header().Get("Vary"); !strings.Contains(got, "Accept-Encoding") {
+		t.Fatalf("vary=%q", got)
+	}
+
+	htmlRequest := httptest.NewRequest(http.MethodHead, "/", nil)
+	htmlResponse := httptest.NewRecorder()
+	server.router.ServeHTTP(htmlResponse, htmlRequest)
+	if htmlResponse.Code != http.StatusOK || htmlResponse.Body.Len() != 0 {
+		t.Fatalf("status=%d body=%q", htmlResponse.Code, htmlResponse.Body.String())
+	}
+	if got := htmlResponse.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("html cache-control=%q", got)
+	}
+}
+
+func TestStaticCompressionHonorsDisabledEncoding(t *testing.T) {
+	staticDir := t.TempDir()
+	assetPath := filepath.Join(staticDir, "asset.js")
+	if err := os.WriteFile(assetPath, []byte("plain"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(assetPath+".br", []byte("brotli"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := newHTTPTestServer(t, newTestRepository(), func(cfg *config.Config) {
+		cfg.StaticDir = staticDir
+	})
+	request := httptest.NewRequest(http.MethodGet, "/asset.js", nil)
+	request.Header.Set("Accept-Encoding", "br;q=0, *;q=1")
+	response := httptest.NewRecorder()
+	server.router.ServeHTTP(response, request)
+	if got := response.Header().Get("Content-Encoding"); got != "" {
+		t.Fatalf("content-encoding=%q, want uncompressed response", got)
+	}
+	if got := response.Body.String(); got != "plain" {
+		t.Fatalf("body=%q", got)
+	}
+}
+
+func TestChatRunNotificationsCoalesceAndUnsubscribe(t *testing.T) {
+	server := newHTTPTestServer(t, newTestRepository(), nil)
+	updates, unsubscribe := server.api.subscribeChatRun("run-1")
+	server.api.notifyChatRun("run-1")
+	server.api.notifyChatRun("run-1")
+
+	select {
+	case <-updates:
+	default:
+		t.Fatal("subscriber did not receive a chat run update")
+	}
+	select {
+	case <-updates:
+		t.Fatal("duplicate chat run updates were not coalesced")
+	default:
+	}
+
+	unsubscribe()
+	server.api.notifyChatRun("run-1")
+	select {
+	case <-updates:
+		t.Fatal("unsubscribed listener received an update")
+	default:
 	}
 }
 

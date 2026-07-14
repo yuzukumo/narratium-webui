@@ -163,8 +163,8 @@ export class ContextNodeTools extends NodeTool {
 
     const dialogueTree = await LocalCharacterDialogueOperations.getDialogueTreeById(characterId);
     const contextNodeId = options.nodeId || dialogueTree?.current_node_id;
-    const path = contextNodeId && contextNodeId !== "root"
-      ? await LocalCharacterDialogueOperations.getDialoguePathToNode(characterId, contextNodeId)
+    const path = dialogueTree && contextNodeId && contextNodeId !== "root"
+      ? LocalCharacterDialogueOperations.getDialoguePath(dialogueTree, contextNodeId)
       : [];
     const opening = path.find((node) => node.parent_node_id === "root" && node.assistant_response)
       ?.assistant_response || "";

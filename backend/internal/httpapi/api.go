@@ -47,6 +47,7 @@ type API struct {
 	runMu                   sync.Mutex
 	runCancels              map[string]context.CancelFunc
 	runExplicitCancels      map[string]bool
+	runSubscribers          map[string]map[chan struct{}]struct{}
 }
 
 type Option func(*API)
@@ -85,6 +86,7 @@ func New(cfg config.Config, repo store.Repository, authService *auth.Service, cr
 		backgroundCtx:       context.Background(),
 		runCancels:          make(map[string]context.CancelFunc),
 		runExplicitCancels:  make(map[string]bool),
+		runSubscribers:      make(map[string]map[chan struct{}]struct{}),
 	}
 	for _, option := range options {
 		option(api)
@@ -302,19 +304,100 @@ func (a *API) attachStatic(router *gin.Engine) {
 		}
 		for _, candidate := range candidates {
 			if withinDir(staticDir, candidate) && regularFile(candidate) {
-				c.File(candidate)
+				serveStaticFile(c, candidate, requestPath)
 				return
 			}
 		}
 		notFound := filepath.Join(staticDir, "404.html")
 		if regularFile(notFound) {
 			if contents, err := os.ReadFile(notFound); err == nil {
+				c.Header("Cache-Control", "no-cache")
 				c.Data(http.StatusNotFound, "text/html; charset=utf-8", contents)
 				return
 			}
 		}
 		writeError(c, http.StatusNotFound, "not_found", "Resource not found.")
 	})
+}
+
+func serveStaticFile(c *gin.Context, path, requestPath string) {
+	servedPath, encoding := compressedStaticPath(path, c.GetHeader("Accept-Encoding"))
+	file, err := os.Open(servedPath)
+	if err != nil {
+		writeError(c, http.StatusNotFound, "not_found", "Resource not found.")
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "static_file_error", "Static file could not be served.")
+		return
+	}
+
+	if contentType := mime.TypeByExtension(filepath.Ext(path)); contentType != "" {
+		c.Header("Content-Type", contentType)
+	}
+	if encoding != "" {
+		c.Header("Content-Encoding", encoding)
+	}
+	c.Header("Vary", "Accept-Encoding")
+	c.Header("Cache-Control", staticCacheControl(requestPath))
+	http.ServeContent(c.Writer, c.Request, filepath.Base(path), info.ModTime(), file)
+}
+
+func compressedStaticPath(path, acceptEncoding string) (string, string) {
+	for _, encoding := range []struct {
+		name   string
+		suffix string
+	}{
+		{name: "br", suffix: ".br"},
+		{name: "gzip", suffix: ".gz"},
+	} {
+		candidate := path + encoding.suffix
+		if acceptsEncoding(acceptEncoding, encoding.name) && regularFile(candidate) {
+			return candidate, encoding.name
+		}
+	}
+	return path, ""
+}
+
+func acceptsEncoding(header, target string) bool {
+	wildcardQuality := -1.0
+	for _, rawPart := range strings.Split(strings.ToLower(header), ",") {
+		parts := strings.Split(rawPart, ";")
+		name := strings.TrimSpace(parts[0])
+		quality := 1.0
+		for _, parameter := range parts[1:] {
+			key, value, found := strings.Cut(strings.TrimSpace(parameter), "=")
+			if found && key == "q" {
+				parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+				if err != nil {
+					quality = 0
+				} else {
+					quality = parsed
+				}
+			}
+		}
+		if name == target {
+			return quality > 0
+		}
+		if name == "*" {
+			wildcardQuality = quality
+		}
+	}
+	return wildcardQuality > 0
+}
+
+func staticCacheControl(requestPath string) string {
+	normalized := filepath.ToSlash(strings.TrimPrefix(requestPath, "/"))
+	if strings.HasPrefix(normalized, "_next/static/") {
+		return "public, max-age=31536000, immutable"
+	}
+	extension := strings.ToLower(filepath.Ext(normalized))
+	if extension == ".html" || extension == ".txt" || extension == "" {
+		return "no-cache"
+	}
+	return "public, max-age=86400"
 }
 
 func decodeJSON(c *gin.Context, target any) error {
