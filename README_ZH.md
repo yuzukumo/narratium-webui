@@ -64,3 +64,9 @@ pnpm build
 - [入门指南](./docs/GETTING_STARTED.md)
 - [Issues](https://github.com/yuzukumo/narratium-webui/issues)
 - [许可证](./LICENSE)
+
+## 友链
+
+**LinuxDo** — [https://linux.do](https://linux.do/)
+
+这个社区为项目提供了一些支持。

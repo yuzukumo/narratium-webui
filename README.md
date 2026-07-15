@@ -71,3 +71,9 @@ Licensed under the [MIT License](./LICENSE). Imported or generated content remai
 - [Getting Started](./docs/GETTING_STARTED.md)
 - [Issues](https://github.com/yuzukumo/narratium-webui/issues)
 - [License](./LICENSE)
+
+## Community Links
+
+**LinuxDo** — [https://linux.do](https://linux.do/)
+
+This community has provided support for the project.
